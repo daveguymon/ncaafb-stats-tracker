@@ -1,0 +1,15 @@
+<li class="game-event">
+  <div class="event-clock"><%= event["clock"].presence || "—" %></div>
+  <div class="event-content">
+    <div class="event-meta">
+      <span><%= (event["play_type"].presence || event["event_type"].presence || event["type"].presence || "event").tr("_-", " ").upcase %></span>
+      <% if game_event_context(event).present? %><span><%= game_event_context(event) %></span><% end %>
+      <% if !event["away_points"].nil? && !event["home_points"].nil? %><span>AWAY <%= event["away_points"] %> – <%= event["home_points"] %> HOME</span><% end %>
+    </div>
+    <p><%= event["description"].presence || "Description not available." %></p>
+    <details class="response-details event-details">
+      <summary>Event details &amp; statistics <span aria-hidden="true">+</span></summary>
+      <pre><%= JSON.pretty_generate(event) %></pre>
+    </details>
+  </div>
+</li>

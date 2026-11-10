@@ -18,5 +18,6 @@ Rails.application.routes.draw do
     get "games/:id/statistics", to: "sportradar#game_statistics"
   end
 
+  get "games/:id", to: "games#show", as: :game
   root "schedules#show"
 end

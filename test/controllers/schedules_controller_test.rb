@@ -37,6 +37,7 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".game-card:first-child", text: /WEEK 1/
     assert_select ".game-card:first-child", text: /14.*28/m
     assert_select "details pre", text: /"id": "early"/
+    assert_select "a[href='/games/early?season=2026']", text: /View play-by-play/
   end
 
   test "selects another season and displays an empty schedule" do

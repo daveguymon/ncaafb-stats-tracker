@@ -81,6 +81,44 @@ button:hover { background: #9c0a23; }
 .response-details summary { width: fit-content; color: #62656a; cursor: pointer; }
 .response-details summary span { color: var(--red); font-weight: bold; }
 .response-details pre { max-height: 340px; overflow: auto; padding: 15px; background: #f5f4f2; color: #333; font-size: 11px; line-height: 1.5; }
+.game-link { grid-column: 1 / -1; width: fit-content; color: var(--red); font-size: 12px; font-weight: bold; text-decoration: none; }
+.game-link:hover, .back-link:hover, .refresh-link:hover { text-decoration: underline; }
+.game-page { max-width: 1180px; margin: auto; padding: 32px 6% 40px; }
+.back-link { display: inline-block; margin-bottom: 22px; color: #62656a; font-size: 12px; font-weight: bold; text-decoration: none; }
+.scoreboard { padding: 28px 32px; background: #a70926; color: #fff; }
+.scoreboard .eyebrow { color: #ffe2e7; }
+.scoreboard .separator { color: #f6a0ad; }
+.scoreboard-teams { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 20px; margin-top: 24px; }
+.scoreboard-team { display: flex; flex-direction: column; gap: 7px; }
+.scoreboard-team:last-child { text-align: right; }
+.scoreboard-team span, .scoreboard-status { font-size: 10px; font-weight: bold; letter-spacing: .12em; color: #f5c5ce; }
+.scoreboard-team strong { font-size: clamp(18px, 3vw, 29px); }
+.scoreboard-team b { font-size: 38px; line-height: 1; }
+.scoreboard-status { text-align: center; }
+.scoreboard-status strong { display: block; margin-top: 10px; color: white; font-size: 10px; }
+.scoreboard-venue { margin: 22px 0 0; color: #f5c5ce; font-size: 12px; }
+.progression { margin-top: 22px; padding: 30px; border: 1px solid var(--line); background: white; }
+.progression-heading { display: flex; justify-content: space-between; align-items: start; gap: 15px; }
+.progression-heading .eyebrow { color: var(--red); }
+.progression-heading h1 { margin: 8px 0; font-size: 32px; letter-spacing: -.04em; }
+.progression-heading h1 span { color: var(--red); }
+.refresh-link { flex-shrink: 0; margin-top: 10px; color: var(--red); font-size: 12px; font-weight: bold; text-decoration: none; }
+.period-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 25px 0; }
+.period-nav a { padding: 9px 12px; border: 1px solid var(--line); color: #555; font-size: 11px; font-weight: bold; text-decoration: none; }
+.period-nav a:hover { border-color: var(--red); color: var(--red); }
+.period { margin-top: 24px; scroll-margin-top: 20px; }
+.period h2 { margin: 0; padding: 13px 15px; background: #28292b; color: white; font-size: 13px; }
+.drive { margin-top: 12px; border: 1px solid var(--line); }
+.drive-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 13px 15px; background: #f5f4f2; font-size: 12px; }
+.drive-heading span { color: var(--muted); }
+.event-list { margin: 0; padding: 0; list-style: none; }
+.standalone-event { margin-top: 12px; border: 1px solid var(--line); }
+.game-event { display: grid; grid-template-columns: 55px minmax(0, 1fr); gap: 15px; padding: 15px; border-top: 1px solid var(--line); }
+.event-clock { color: #555; font-size: 12px; font-weight: bold; }
+.event-meta { display: flex; flex-wrap: wrap; gap: 8px 15px; color: var(--red); font-size: 10px; font-weight: bold; letter-spacing: .05em; }
+.event-content p { margin: 7px 0 10px; font-size: 13px; line-height: 1.5; }
+.event-details pre { white-space: pre; }
+.period-empty { margin: 0; padding: 15px; color: var(--muted); font-size: 12px; }
 .state-message { margin-top: 28px; padding: 28px; background: #f7f6f4; font-size: 14px; }
 .state-message p { margin-bottom: 0; color: #696b6d; line-height: 1.5; }
 .state-message.error { border-left: 3px solid var(--red); }
@@ -107,4 +145,12 @@ footer { display: flex; justify-content: space-between; padding: 20px 6% 30px; c
   .versus { font-size: 11px; }
   .game-result { text-align: right; }
   footer { gap: 10px; }
+  .game-page { padding: 24px 4% 35px; }
+  .scoreboard { padding: 22px 18px; }
+  .scoreboard-teams { gap: 10px; }
+  .scoreboard-team b { font-size: 30px; }
+  .progression { padding: 20px 15px; }
+  .progression-heading { flex-wrap: wrap; }
+  .progression-heading h1 { font-size: 27px; }
+  .game-event { grid-template-columns: 42px minmax(0, 1fr); gap: 10px; padding: 12px; }
 }

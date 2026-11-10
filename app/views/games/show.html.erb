@@ -1,0 +1,64 @@
+<% content_for :title, "Utah Football | Play-by-Play" %>
+
+<main class="dashboard">
+  <%= render "shared/masthead" %>
+  <div class="game-page">
+    <%= link_to "← Back to schedule", @season ? root_path(season: @season) : root_path, class: "back-link" %>
+
+    <% if @error %>
+      <div class="state-message error" role="alert"><strong>Play-by-play unavailable</strong><p><%= @error %></p></div>
+    <% else %>
+      <% summary = @game["summary"] || {}; away = summary["away"] || {}; home = summary["home"] || {} %>
+      <section class="scoreboard" aria-label="Game summary">
+        <p class="eyebrow">GAME CENTER <span class="separator">/</span> PLAY-BY-PLAY</p>
+        <div class="scoreboard-teams">
+          <div class="scoreboard-team"><span>AWAY</span><strong><%= game_team_name(away) %></strong><b><%= away["points"].nil? ? "–" : away["points"] %></b></div>
+          <div class="scoreboard-status"><span>VS</span><strong><%= @game["status"].presence&.tr("_-", " ")&.upcase || "STATUS TBD" %></strong></div>
+          <div class="scoreboard-team"><span>HOME</span><strong><%= game_team_name(home) %></strong><b><%= home["points"].nil? ? "–" : home["points"] %></b></div>
+        </div>
+        <% if summary.dig("venue", "name").present? %><p class="scoreboard-venue"><%= summary.dig("venue", "name") %></p><% end %>
+      </section>
+
+      <section class="progression" aria-labelledby="progression-heading">
+        <div class="progression-heading">
+          <div><p class="eyebrow">THE GAME, PLAY BY PLAY</p><h1 id="progression-heading">Game progression<span>.</span></h1>
+            <p class="results-subtitle">Events are shown in the order provided by Sportradar. Refresh uses the app's cache.</p></div>
+          <%= link_to "Refresh game ↻", game_path(params[:id], season: @season), class: "refresh-link" %>
+        </div>
+        <% if @periods.none? { |period| period["pbp"].present? } %>
+          <div class="state-message"><strong>No play-by-play available yet</strong><p>Events will appear here when Sportradar provides them. Refresh to check again.</p></div>
+        <% else %>
+          <nav class="period-nav" aria-label="Jump to period">
+            <% @periods.each_with_index do |period, index| %>
+              <a href="#period-<%= index + 1 %>"><%= period_name(period, index) %></a>
+            <% end %>
+          </nav>
+          <% @periods.each_with_index do |period, index| %>
+            <section class="period" id="period-<%= index + 1 %>" aria-labelledby="period-heading-<%= index + 1 %>">
+              <h2 id="period-heading-<%= index + 1 %>"><%= period_name(period, index) %></h2>
+              <% if period["pbp"].blank? %>
+                <p class="period-empty">No events available for this period.</p>
+              <% else %>
+                <% period["pbp"].each do |entry| %>
+                  <% if entry["type"] == "drive" %>
+                    <div class="drive">
+                      <div class="drive-heading"><strong><%= drive_team_name(entry["offensive_team"], summary) %> drive</strong>
+                        <span><%= [entry["play_count"] && "#{entry["play_count"]} plays", entry["net_yards"] && "#{entry["net_yards"]} yards", entry["end_reason"]].compact.join(" · ") %></span>
+                      </div>
+                      <% if entry["events"].blank? %><p class="period-empty">No events available for this drive.</p><% end %>
+                      <ol class="event-list"><%= render partial: "event", collection: entry["events"] || [], as: :event %></ol>
+                    </div>
+                  <% else %>
+                    <ol class="event-list standalone-event"><%= render "event", event: entry %></ol>
+                  <% end %>
+                <% end %>
+              <% end %>
+            </section>
+          <% end %>
+        <% end %>
+      </section>
+      <div class="data-source"><span class="live-dot"></span> DATA PROVIDED BY SPORTRADAR <span> / </span> SUBJECT TO AVAILABILITY</div>
+    <% end %>
+  </div>
+  <footer><span>UTAH FOOTBALL STATS TRACKER</span><span>BUILT FOR THE GAME.</span></footer>
+</main>
