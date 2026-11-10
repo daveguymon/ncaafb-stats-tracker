@@ -64,10 +64,14 @@ module Sportradar
         Array(season_types).flat_map do |type|
           schedule = season_schedule(year, type)
           games = Array(schedule["weeks"]).flat_map do |week|
-            Array(week["games"]).map { |game| game.merge("week" => week["number"], "season_type" => type.to_s.upcase) }
+            Array(week["games"]).map do |game|
+              game.merge("week" => week["title"] || week["sequence"] || week["number"], "season_type" => type.to_s.upcase)
+            end
           end
           games.select { |game| game.dig("home", "id") == team_id || game.dig("away", "id") == team_id }
         rescue NotFoundError
+          raise unless type.to_s.upcase == "PST"
+
           []
         end
       end

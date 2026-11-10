@@ -1,24 +1,14 @@
-# README
+# Utah Football Stats Tracker
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+Set `SPORTRADAR_API_KEY` in `.env` for development (see `.env.example`), install
+dependencies with `bundle install`, and start the app with `bin/rails server`.
+Visit `http://localhost:3000` to view Utah's schedule. Enter a four-digit year
+to load a different season; games are ordered by scheduled time (UTC), with
+games without a known time last. Expand a game to inspect its response data.
 
-Things you may want to cover:
+The schedule combines regular-season and postseason feeds. A missing
+postseason feed is skipped; other API errors are displayed. Responses are
+cached in-app according to the existing Sportradar client cache policy.
+Availability of historical seasons depends on your Sportradar subscription.
 
-* Ruby version
-
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+Run tests with `bin/rails test`.

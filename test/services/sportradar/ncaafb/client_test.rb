@@ -56,7 +56,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
 
   test "team_games filters the season schedule to the team and tolerates missing postseason" do
     utah = Sportradar::Ncaafb::Teams::UTAH[:id]
-    body = { weeks: [ { number: 1, games: [
+    body = { weeks: [ { sequence: 1, title: "1", games: [
       { id: "a", home: { id: utah }, away: { id: "x" } },
       { id: "b", home: { id: "y" }, away: { id: utah } },
       { id: "c", home: { id: "y" }, away: { id: "x" } }
@@ -73,8 +73,15 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
       games = client.team_games(2025)
       assert_equal %w[a b], games.map { |g| g["id"] }
       assert_equal [ "REG" ], games.map { |g| g["season_type"] }.uniq
+      assert_equal [ "1", "1" ], games.map { |g| g["week"] }
     ensure
       Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "team_games propagates a missing regular season" do
+    stub_http(FakeResponse.new("404", "")) do
+      assert_raises(Sportradar::Ncaafb::Client::NotFoundError) { client.team_games(2025) }
     end
   end
 

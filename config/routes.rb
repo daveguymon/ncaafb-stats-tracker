@@ -18,6 +18,5 @@ Rails.application.routes.draw do
     get "games/:id/statistics", to: "sportradar#game_statistics"
   end
 
-  # Defines the root path route ("/")
-  # root "posts#index"
+  root "schedules#show"
 end

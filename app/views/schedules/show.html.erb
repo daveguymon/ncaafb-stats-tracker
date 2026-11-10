@@ -1,0 +1,96 @@
+<% content_for :title, "Utah Football | Season Schedule" %>
+
+<main class="dashboard">
+  <header class="masthead">
+    <a class="brand" href="<%= root_path %>" aria-label="Utah Football Stats home">
+      <span class="brand-mark" aria-hidden="true">U</span>
+      <span>UTAH <strong>FOOTBALL</strong><small>STATS TRACKER</small></span>
+    </a>
+    <span class="masthead-label">NCAA FOOTBALL <span> / </span> DATA EXPLORER</span>
+  </header>
+
+  <section class="hero">
+    <div>
+      <p class="eyebrow"><span class="live-dot"></span> THE SEASON, IN FOCUS</p>
+      <h1>Every game.<br><em>One season.</em></h1>
+      <p class="hero-description">Explore the Utah Utes schedule, from kickoff to the final whistle.</p>
+    </div>
+    <div class="hero-watermark" aria-hidden="true">UTAH</div>
+  </section>
+
+  <section class="workspace" aria-label="Schedule explorer">
+    <aside class="sidebar">
+      <div class="section-heading"><span>01</span> YOUR SELECTION</div>
+      <form action="<%= root_path %>" method="get">
+        <div class="field-label">TEAM</div>
+        <div class="team-selection"><span class="team-badge">U</span><span>Utah Utes<small>Selected team</small></span><span class="check" aria-hidden="true">&#10003;</span></div>
+        <label for="season">SEASON YEAR</label>
+        <input id="season" name="season" type="number" inputmode="numeric" min="1000" max="9999" step="1" value="<%= @season %>" required>
+        <p class="field-help">Enter a past or current season year.</p>
+        <button type="submit">View schedule <span aria-hidden="true">&rarr;</span></button>
+      </form>
+
+      <div class="flow">
+        <div class="section-heading"><span>02</span> REQUEST FLOW</div>
+        <p>How your schedule gets here</p>
+        <ol>
+          <li><strong>Your selection</strong><small>Utah Utes &middot; <%= @season %></small></li>
+          <li><strong>App cache</strong><small>Checks for a saved response</small></li>
+          <li><strong>Sportradar API</strong><small>Requests schedules if needed</small></li>
+          <li><strong>Game list</strong><small>Filters and orders Utah games</small></li>
+        </ol>
+        <p class="flow-note">Regular season and postseason schedules are requested. A missing postseason is skipped.</p>
+      </div>
+    </aside>
+
+    <section class="results" aria-labelledby="schedule-heading">
+      <div class="results-header">
+        <div>
+          <p class="eyebrow">UTAH UTES <span class="separator">/</span> <%= @season %> SEASON</p>
+          <h2 id="schedule-heading">Game schedule<span>.</span></h2>
+          <p class="results-subtitle">Regular season &amp; postseason <span>&middot;</span> Times shown in UTC</p>
+        </div>
+        <% if @games %><div class="game-count"><strong><%= format("%02d", @games.size) %></strong><span>GAMES</span></div><% end %>
+      </div>
+
+      <% if @error %>
+        <div class="state-message error" role="alert"><strong>Schedule unavailable</strong><p><%= @error %></p></div>
+      <% elsif @games.empty? %>
+        <div class="state-message"><strong>No games found</strong><p>No Utah games were returned for this season. Try another year.</p></div>
+      <% else %>
+        <div class="list-label"><span>DATE / WEEK</span><span>MATCHUP</span><span>RESULT / STATUS</span></div>
+        <ol class="game-list">
+          <% @games.each do |game| %>
+            <% home = game["home"] || {}; away = game["away"] || {}; score = game["scoring"] || {}; date = game_date(game) %>
+            <li class="game-card">
+              <div class="game-date">
+                <% if date %>
+                  <strong><%= date.utc.strftime("%b %d") %></strong>
+                  <small><%= game["status"] == "time-tbd" ? "#{date.utc.year} · Kickoff TBD" : date.utc.strftime("%Y · %H:%M UTC") %></small>
+                <% else %>
+                  <strong>Date TBD</strong><small>Time not available</small>
+                <% end %>
+                <span class="week-label"><%= game["season_type"] == "PST" ? "POSTSEASON" : (game["week"].present? ? "WEEK #{game["week"]}" : "REGULAR SEASON") %></span>
+              </div>
+              <div class="matchup">
+                <div><span class="matchup-label">AWAY</span><strong><%= away["name"].presence || away["alias"].presence || "Opponent TBD" %></strong></div>
+                <span class="versus">at</span>
+                <div><span class="matchup-label">HOME</span><strong><%= home["name"].presence || home["alias"].presence || "Opponent TBD" %></strong></div>
+              </div>
+              <div class="game-result">
+                <% if !score["away_points"].nil? && !score["home_points"].nil? %><strong><%= score["away_points"] %> <span>–</span> <%= score["home_points"] %></strong><% end %>
+                <span class="status"><%= game["status"].presence&.tr("_-", " ")&.upcase || "STATUS TBD" %></span>
+              </div>
+              <details class="response-details">
+                <summary>View response data <span aria-hidden="true">+</span></summary>
+                <pre><%= JSON.pretty_generate(game) %></pre>
+              </details>
+            </li>
+          <% end %>
+        </ol>
+      <% end %>
+      <div class="data-source"><span class="live-dot"></span> DATA PROVIDED BY SPORTRADAR <span> / </span> SUBJECT TO AVAILABILITY</div>
+    </section>
+  </section>
+  <footer><span>UTAH FOOTBALL STATS TRACKER</span><span>BUILT FOR THE GAME.</span></footer>
+</main>
