@@ -12,7 +12,10 @@ Rails.application.routes.draw do
   scope :sportradar, as: :sportradar, defaults: { format: :json } do
     get "hierarchy", to: "sportradar#hierarchy"
     get "schedule/:year/:season_type", to: "sportradar#schedule", constraints: { year: /\d{4}/ }
+    get "utah/games/:year", to: "sportradar#utah_games", constraints: { year: /\d{4}/ }
     get "games/:id", to: "sportradar#game"
+    get "games/:id/pbp", to: "sportradar#play_by_play"
+    get "games/:id/statistics", to: "sportradar#game_statistics"
   end
 
   # Defines the root path route ("/")

@@ -24,8 +24,20 @@ class SportradarController < ApplicationController
     render json: client.season_schedule(params[:year], params[:season_type])
   end
 
+  def utah_games
+    render json: client.team_games(params[:year])
+  end
+
   def game
     render json: client.game_summary(params[:id])
+  end
+
+  def play_by_play
+    render json: client.game_play_by_play(params[:id])
+  end
+
+  def game_statistics
+    render json: client.game_statistics(params[:id])
   end
 
   private

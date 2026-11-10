@@ -46,8 +46,9 @@ Rails.application.configure do
   # Don't log any deprecations.
   config.active_support.report_deprecations = false
 
-  # Replace the default in-process memory cache store with a durable alternative.
-  # config.cache_store = :mem_cache_store
+  # File store on the persistent storage/ volume keeps cached Sportradar
+  # responses across deploys and restarts.
+  config.cache_store = :file_store, Rails.root.join("storage/cache").to_s
 
   # Replace the default in-process and non-durable queuing backend for Active Job.
   # config.active_job.queue_adapter = :resque
