@@ -9,7 +9,9 @@ class SchedulesController < ApplicationController
       return
     end
 
-    season_games = Sportradar::Ncaafb::Client.new.season_games(@season)
+    client = Sportradar::Ncaafb::Client.new
+    season_games = client.season_games(@season)
+    @freshness = client.request_metadata
     @games = season_games.select { |game| [ game.dig("home", "id"), game.dig("away", "id") ].include?(@team[:id]) }
     @games = @games.sort_by { |game| [ game_date(game).nil? ? 1 : 0, game_date(game) || Time.at(0) ] }
     @records = Sportradar::Ncaafb::SeasonRecords.new(season_games).for_games(@games)

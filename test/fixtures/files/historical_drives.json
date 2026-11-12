@@ -1,0 +1,23 @@
+{
+  "description": "Synthetic historical drive segments, including a quarter continuation, a turnover, and a negated play.",
+  "periods": [
+    {
+      "number": 1,
+      "pbp": [
+        { "type": "drive", "id": "drive-1", "end_reason": "UNKNOWN", "events": [
+          { "type": "play", "play_type": "rush", "start_situation": { "possession": { "id": "utah" } }, "end_situation": { "possession": { "id": "utah" } } }
+        ] },
+        { "type": "event", "event_type": "period_end", "description": "End of Quarter" }
+      ]
+    },
+    {
+      "number": 2,
+      "pbp": [
+        { "type": "drive", "id": "drive-1", "end_reason": "UNKNOWN", "events": [
+          { "type": "play", "play_type": "pass", "start_situation": { "possession": { "id": "utah" } }, "end_situation": { "possession": { "id": "opponent" } }, "details": [ { "category": "pass_interception_return" } ] },
+          { "type": "play", "play_type": "rush", "description": "Penalty accepted. No Play.", "start_situation": { "possession": { "id": "utah" } }, "end_situation": { "possession": { "id": "utah" } } }
+        ] }
+      ]
+    }
+  ]
+}

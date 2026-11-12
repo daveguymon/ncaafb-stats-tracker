@@ -3,10 +3,37 @@ require "test_helper"
 class SchedulesControllerTest < ActionDispatch::IntegrationTest
   def with_client(client)
     original = Sportradar::Ncaafb::Client.method(:new)
+    client.define_singleton_method(:request_metadata) { [] } unless client.respond_to?(:request_metadata)
     Sportradar::Ncaafb::Client.define_singleton_method(:new) { client }
     yield
   ensure
     Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
+  end
+
+  test "displays freshness separately for regular season and unavailable postseason" do
+    client = Object.new
+    client.define_singleton_method(:season_games) { |_| [] }
+    client.define_singleton_method(:request_metadata) do
+      [
+        { path: "games/2020/REG/schedule", source: :cached, fetched_at: Time.utc(2026, 11, 12, 9, 0) },
+        { path: "games/2020/PST/schedule", source: :not_found, fetched_at: nil }
+      ]
+    end
+    with_client(client) { get root_path, params: { season: "2020" } }
+    assert_select ".freshness", text: /Regular season: Cached; fetched Nov 12, 2026 at 09:00:00 UTC/
+    assert_select ".freshness", text: /Postseason: Feed unavailable/
+    assert_select ".freshness", text: /does not force an upstream refresh/
+  end
+
+  test "displays an unknown fetch time for legacy cached data" do
+    client = Object.new
+    client.define_singleton_method(:season_games) { |_| [] }
+    client.define_singleton_method(:request_metadata) do
+      [ { path: "games/2020/REG/schedule", source: :cached, fetched_at: nil } ]
+    end
+    with_client(client) { get root_path, params: { season: "2020" } }
+
+    assert_select ".freshness", text: /Regular season: Cached; fetch time unavailable/
   end
 
   test "defaults to Utah and current season and orders games by date" do

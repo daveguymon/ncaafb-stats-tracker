@@ -47,7 +47,8 @@ module GamesHelper
     return "Inferred: #{inferred}" if inferred
 
     next_drive = (next_period&.dig("pbp") || []).find { |entry| entry["type"] == "drive" }
-    if drive["id"].present? && next_drive && next_drive["id"] == drive["id"]
+    if drive["id"].present? && following_entries.none? { |entry| %w[drive play].include?(entry["type"]) } &&
+        next_drive && next_drive["id"] == drive["id"]
       return "Continued in next period"
     end
 

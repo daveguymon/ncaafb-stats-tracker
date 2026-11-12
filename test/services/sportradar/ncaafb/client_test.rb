@@ -92,10 +92,12 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     original = Net::HTTP.method(:new)
     Net::HTTP.define_singleton_method(:new) { |*| fake }
     begin
-      games = client.team_games(2025)
+      c = client
+      games = c.team_games(2025)
       assert_equal %w[a b], games.map { |g| g["id"] }
       assert_equal [ "REG" ], games.map { |g| g["season_type"] }.uniq
       assert_equal [ "1", "1" ], games.map { |g| g["week"] }
+      assert_equal({ path: "games/2025/PST/schedule", source: :not_found, fetched_at: nil }, c.request_metadata.last)
     ensure
       Net::HTTP.define_singleton_method(:new, original)
     end
@@ -113,7 +115,54 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     reqs = stub_http(FakeResponse.new("200", '{"ok":true}')) do
       2.times { assert_equal({ "ok" => true }, c.league_hierarchy) }
     end
+
     assert_equal 1, reqs.size
+  end
+
+  test "records fetch time and cache source while preserving the original payload" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    coordinator = ImmediateCoordinator.new
+    travel_to Time.utc(2026, 11, 12, 9) do
+      c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: coordinator)
+      stub_http(FakeResponse.new("200", '{"weeks":[]}')) do
+        assert_equal({ "weeks" => [] }, c.season_schedule(2026))
+        assert_equal :fetched, c.request_metadata.last[:source]
+        assert_equal Time.current, c.request_metadata.last[:fetched_at]
+      end
+    end
+    travel_to Time.utc(2026, 11, 12, 9, 5) do
+      c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: ImmediateCoordinator.new)
+      assert_equal({ "weeks" => [] }, c.season_schedule(2026))
+      assert_equal :cached, c.request_metadata.last[:source]
+      assert_equal Time.utc(2026, 11, 12, 9), c.request_metadata.last[:fetched_at]
+    end
+    travel_to Time.utc(2026, 11, 12, 9, 11) do
+      c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: coordinator)
+      stub_http(FakeResponse.new("200", '{"weeks":[{"title":"new"}]}')) do
+        assert_equal({ "weeks" => [ { "title" => "new" } ] }, c.season_schedule(2026))
+        assert_equal :fetched, c.request_metadata.last[:source]
+        assert_equal Time.current, c.request_metadata.last[:fetched_at]
+      end
+    end
+  end
+
+  test "reports a legacy cached payload with unknown fetch time" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    store.write([ "sportradar/ncaafb", "trial", "league/hierarchy" ], { "legacy" => true })
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: ImmediateCoordinator.new)
+    assert_equal({ "legacy" => true }, c.league_hierarchy)
+    assert_equal({ path: "league/hierarchy", source: :cached, fetched_at: nil }, c.request_metadata.last)
+  end
+
+  test "does not reuse a language-less legacy entry for other languages" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    store.write([ "sportradar/ncaafb", "trial", "league/hierarchy" ], { "legacy" => true })
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", language: "es", cache: store, coordinator: ImmediateCoordinator.new)
+    reqs = stub_http(FakeResponse.new("200", '{"spanish":true}')) do
+      assert_equal({ "spanish" => true }, c.league_hierarchy)
+      assert_equal :fetched, c.request_metadata.last[:source]
+    end
+    assert_equal "/ncaafb/trial/v7/es/league/hierarchy.json", reqs.first.uri.path
   end
 
   test "does not cache errors" do

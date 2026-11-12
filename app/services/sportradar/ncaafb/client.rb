@@ -34,6 +34,8 @@ module Sportradar
       MAX_RATE_LIMIT_RETRIES = 1
       DEFAULT_RETRY_DELAY = 1
 
+      attr_reader :request_metadata
+
       def initialize(api_key: ENV["SPORTRADAR_API_KEY"],
                      access_level: ENV.fetch("SPORTRADAR_ACCESS_LEVEL", "trial"),
                      language: "en",
@@ -48,6 +50,7 @@ module Sportradar
         @coordinator = coordinator || RequestCoordinator.new(api_key: api_key, access_level: access_level)
         @open_timeout = open_timeout
         @read_timeout = read_timeout
+        @request_metadata = []
       end
 
       def league_hierarchy
@@ -83,6 +86,7 @@ module Sportradar
         rescue NotFoundError
           raise unless type.to_s.upcase == "PST"
 
+          @request_metadata << { path: "games/#{Integer(year)}/PST/schedule", source: :not_found, fetched_at: nil }
           []
         end
       end
@@ -117,16 +121,19 @@ module Sportradar
       def get(path, ttl: TTL_STATIC)
         raise ConfigurationError, "SPORTRADAR_API_KEY is not set" if @api_key.blank?
 
-        key = [ "sportradar/ncaafb", @access_level, path ]
-        cached = @cache.read(key)
-        return cached unless cached.nil?
+        legacy_key = [ "sportradar/ncaafb", @access_level, path ]
+        key = [ "sportradar/ncaafb/v2", @access_level, @language, path ]
+        cached = read_cached(key, legacy_key, path)
+        return cached[:data] if cached
 
         @coordinator.synchronize do |gate|
-          cached = @cache.read(key)
-          next cached unless cached.nil?
+          cached = read_cached(key, legacy_key, path)
+          next cached[:data] if cached
 
           data = request(path, gate)
-          @cache.write(key, data, expires_in: ttl.respond_to?(:call) ? ttl.call(data) : ttl)
+          fetched_at = Time.current.utc
+          @cache.write(key, { data: data, fetched_at: fetched_at }, expires_in: ttl.respond_to?(:call) ? ttl.call(data) : ttl)
+          @request_metadata << { path: path, source: :fetched, fetched_at: fetched_at }
           data
         end
       rescue RequestCoordinator::Busy => e
@@ -134,6 +141,21 @@ module Sportradar
       end
 
       private
+
+      def read_cached(key, legacy_key, path)
+        cached = @cache.read(key)
+        if cached
+          @request_metadata << { path: path, source: :cached, fetched_at: cached[:fetched_at] }
+          return cached
+        end
+
+        # Older cache entries contain only the payload, so their age is unknown.
+        legacy = @cache.read(legacy_key) if @language == "en"
+        return if legacy.nil?
+
+        @request_metadata << { path: path, source: :cached, fetched_at: nil }
+        { data: legacy }
+      end
 
       def request(path, gate)
         uri = URI("#{BASE_URL}/#{@access_level}/#{VERSION}/#{@language}/#{path}.json")

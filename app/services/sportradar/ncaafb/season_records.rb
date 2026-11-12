@@ -35,6 +35,7 @@ module Sportradar
         cutoff = cutoff.utc.beginning_of_day if game["status"] == "time-tbd"
         counts = { wins: 0, losses: 0, ties: 0 }
 
+        counted_games = {}
         @games_by_team[team_id].each do |other|
           next if other.equal?(game) || !FINAL_STATUSES.include?(other["status"])
 
@@ -47,10 +48,18 @@ module Sportradar
 
           home_score = other.dig("scoring", "home_points")
           away_score = other.dig("scoring", "away_points")
-          return unless home_score.is_a?(Numeric) && away_score.is_a?(Numeric)
+          return unless home_score.is_a?(Integer) && away_score.is_a?(Integer) && home_score >= 0 && away_score >= 0
 
           team_score, opponent_score = other.dig("home", "id") == team_id ? [ home_score, away_score ] : [ away_score, home_score ]
           result = team_score == opponent_score ? :ties : (team_score > opponent_score ? :wins : :losses)
+          if other["id"].present?
+            signature = [ date, other.dig("home", "id"), other.dig("away", "id"), home_score, away_score ]
+            prior = counted_games[other["id"]]
+            return if prior && prior != signature
+            next if prior
+
+            counted_games[other["id"]] = signature
+          end
           counts[result] += 1
         end
 

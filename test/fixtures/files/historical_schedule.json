@@ -1,0 +1,9 @@
+{
+  "description": "Synthetic historical schedule covering a tie, an opponent's prior win, a Utah loss, and a postseason game.",
+  "games": [
+    { "id": "early", "scheduled": "2000-09-02T18:00:00Z", "status": "closed", "season_type": "REG", "home": { "id": "utah" }, "away": { "id": "other" }, "scoring": { "home_points": 14, "away_points": 14 } },
+    { "id": "opponent-win", "scheduled": "2000-09-03T18:00:00Z", "status": "complete", "season_type": "REG", "home": { "id": "opponent" }, "away": { "id": "other" }, "scoring": { "home_points": 21, "away_points": 7 } },
+    { "id": "matchup", "scheduled": "2000-09-09T18:00:00Z", "status": "closed", "season_type": "REG", "home": { "id": "utah", "game_number": 2 }, "away": { "id": "opponent", "game_number": 2 }, "scoring": { "home_points": 10, "away_points": 17 } },
+    { "id": "postseason", "scheduled": "2000-12-30T18:00:00Z", "status": "scheduled", "season_type": "PST", "home": { "id": "utah" }, "away": { "id": "opponent" } }
+  ]
+}

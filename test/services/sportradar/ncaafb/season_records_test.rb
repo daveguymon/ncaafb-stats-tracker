@@ -1,6 +1,15 @@
 require "test_helper"
 
 class Sportradar::Ncaafb::SeasonRecordsTest < ActiveSupport::TestCase
+  test "reconstructs records from a synthetic historical season fixture" do
+    games = JSON.parse(file_fixture("historical_schedule.json").read).fetch("games")
+    target, postseason = games.last(2)
+    records = Sportradar::Ncaafb::SeasonRecords.new(games).for_games([ target, postseason ])
+    assert_equal({ wins: 0, losses: 0, ties: 1 }, records[target.object_id]["home"])
+    assert_equal({ wins: 1, losses: 0, ties: 0 }, records[target.object_id]["away"])
+    assert_equal({ wins: 0, losses: 1, ties: 1 }, records[postseason.object_id]["home"])
+  end
+
   def game(id, date, home, away, home_points: nil, away_points: nil, status: "closed", season_type: "REG")
     {
       "id" => id, "scheduled" => date, "status" => status, "season_type" => season_type,
@@ -57,5 +66,23 @@ class Sportradar::Ncaafb::SeasonRecordsTest < ActiveSupport::TestCase
     earlier = game("a", "2025-09-08T12:00:00Z", "utah", "other", home_points: 7, away_points: 3)
     target["status"] = "time-tbd"
     assert_nil Sportradar::Ncaafb::SeasonRecords.new([ earlier, target ]).for_games([ target ])[target.object_id]["home"]
+  end
+
+  test "deduplicates repeated schedule entries but rejects conflicting results" do
+    first = game("a", "2020-11-22T03:30:00Z", "utah", "usc", home_points: 17, away_points: 33)
+    target = game("b", "2020-11-29T03:30:00Z", "utah", "other", status: "scheduled")
+    copy = first.deep_dup
+    records = Sportradar::Ncaafb::SeasonRecords.new([ first, copy, target ]).for_games([ target ])
+    assert_equal({ wins: 0, losses: 1, ties: 0 }, records[target.object_id]["home"])
+
+    copy["scoring"]["home_points"] = 18
+    records = Sportradar::Ncaafb::SeasonRecords.new([ first, copy, target ]).for_games([ target ])
+    assert_nil records[target.object_id]["home"]
+  end
+
+  test "does not derive records from invalid score data" do
+    prior = game("a", "2020-11-22T03:30:00Z", "utah", "usc", home_points: -1, away_points: 33)
+    target = game("b", "2020-11-29T03:30:00Z", "utah", "other", status: "scheduled")
+    assert_nil Sportradar::Ncaafb::SeasonRecords.new([ prior, target ]).for_games([ target ])[target.object_id]["home"]
   end
 end

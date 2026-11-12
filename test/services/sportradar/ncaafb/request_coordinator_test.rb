@@ -37,6 +37,9 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
       clients.size.times { start << true }
       assert_equal Array.new(8, { "ok" => true }), threads.map(&:value)
       assert_equal 1, requests.size
+      assert_equal 1, clients.count { |client| client.request_metadata.first[:source] == :fetched }
+      assert_equal 7, clients.count { |client| client.request_metadata.first[:source] == :cached }
+      assert_equal 1, clients.map { |client| client.request_metadata.first[:fetched_at] }.uniq.size
     ensure
       Net::HTTP.define_singleton_method(:new, original)
     end

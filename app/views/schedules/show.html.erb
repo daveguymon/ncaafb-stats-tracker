@@ -48,6 +48,7 @@
         <% if @games %><div class="game-count"><strong><%= format("%02d", @games.size) %></strong><span>GAMES</span></div><% end %>
       </div>
 
+      <%= render "shared/freshness", entries: @freshness if @freshness.present? %>
       <% if @error %>
         <div class="state-message error" role="alert"><strong>Schedule unavailable</strong><p><%= @error %></p></div>
       <% elsif @games.empty? %>

@@ -1,7 +1,9 @@
 class GamesController < ApplicationController
   def show
     @season = params[:season] if params[:season].is_a?(String) && params[:season].match?(/\A\d{4}\z/)
-    @game = Sportradar::Ncaafb::Client.new.game_play_by_play(params[:id])
+    client = Sportradar::Ncaafb::Client.new
+    @game = client.game_play_by_play(params[:id])
+    @freshness = client.request_metadata
     @periods = @game["periods"] || []
   rescue ArgumentError
     @error = "Invalid game ID."

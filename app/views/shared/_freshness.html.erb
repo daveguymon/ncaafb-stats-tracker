@@ -1,0 +1,9 @@
+<section class="freshness" aria-label="Data freshness">
+  <strong>Data freshness</strong>
+  <ul>
+    <% entries.each do |entry| %>
+      <li><%= freshness_label(entry) %>: <%= freshness_description(entry) %></li>
+    <% end %>
+  </ul>
+  <p>Fetch times reflect when this app received data, not when Sportradar last updated it. Reloading checks the cache and does not force an upstream refresh.</p>
+</section>

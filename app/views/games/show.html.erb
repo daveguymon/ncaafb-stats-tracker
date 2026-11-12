@@ -19,11 +19,12 @@
         <% if summary.dig("venue", "name").present? %><p class="scoreboard-venue"><%= summary.dig("venue", "name") %></p><% end %>
       </section>
 
+      <%= render "shared/freshness", entries: @freshness if @freshness.present? %>
       <section class="progression" aria-labelledby="progression-heading">
         <div class="progression-heading">
           <div><p class="eyebrow">THE GAME, PLAY BY PLAY</p><h1 id="progression-heading">Game progression<span>.</span></h1>
             <p class="results-subtitle">Events are shown in the order provided by Sportradar. Inferred drive results are derived from play data. Refresh uses the app's cache.</p></div>
-          <%= link_to "Refresh game ↻", game_path(params[:id], season: @season), class: "refresh-link" %>
+          <%= link_to "Reload game ↻", game_path(params[:id], season: @season), class: "refresh-link" %>
         </div>
         <% if @periods.none? { |period| period["pbp"].present? } %>
           <div class="state-message"><strong>No play-by-play available yet</strong><p>Events will appear here when Sportradar provides them. Refresh to check again.</p></div>

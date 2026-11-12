@@ -1,6 +1,14 @@
 require "test_helper"
 
 class GamesHelperTest < ActionView::TestCase
+  test "reconstructs synthetic historical drive segments across quarters" do
+    periods = JSON.parse(file_fixture("historical_drives.json").read).fetch("periods")
+    first = periods.first.fetch("pbp").first
+    second = periods.last.fetch("pbp").first
+    assert_equal "Continued in next period", drive_result(first, periods.first.fetch("pbp").drop(1), periods.last)
+    assert_equal "Inferred: Interception", drive_result(second, [], nil)
+  end
+
   setup do
     @summary = {
       "home" => { "id" => "utah", "market" => "Utah", "name" => "Utes" },
@@ -107,5 +115,6 @@ class GamesHelperTest < ActionView::TestCase
     assert_equal "End of Quarter", drive_result(drive, [ period_end ], nil)
     assert_equal "Result unavailable", drive_result(drive, [ { "type" => "event", "event_type" => "timeout" } ], nil)
     assert_equal "Result unavailable", drive_result(drive, [ { "type" => "drive" }, period_end ], nil)
+    assert_equal "Result unavailable", drive_result(drive, [ { "type" => "drive" }, period_end ], next_period)
   end
 end

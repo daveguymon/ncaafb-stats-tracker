@@ -82,6 +82,10 @@ button:hover { background: #9c0a23; }
 .response-details summary { width: fit-content; color: #62656a; cursor: pointer; }
 .response-details summary span { color: var(--red); font-weight: bold; }
 .response-details pre { max-height: 340px; overflow: auto; padding: 15px; background: #f5f4f2; color: #333; font-size: 11px; line-height: 1.5; }
+.freshness { margin-top: 20px; padding: 14px 16px; background: #f5f4f2; color: #555; font-size: 12px; line-height: 1.5; }
+.freshness strong { color: #333; }
+.freshness ul { margin: 6px 0; padding-left: 18px; }
+.freshness p { margin: 6px 0 0; }
 .game-link { grid-column: 1 / -1; width: fit-content; color: var(--red); font-size: 12px; font-weight: bold; text-decoration: none; }
 .game-link:hover, .back-link:hover, .refresh-link:hover { text-decoration: underline; }
 .game-page { max-width: 1180px; margin: auto; padding: 32px 6% 40px; }

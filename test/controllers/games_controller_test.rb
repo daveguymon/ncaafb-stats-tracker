@@ -3,10 +3,23 @@ require "test_helper"
 class GamesControllerTest < ActionDispatch::IntegrationTest
   def with_client(client)
     original = Sportradar::Ncaafb::Client.method(:new)
+    client.define_singleton_method(:request_metadata) { [] } unless client.respond_to?(:request_metadata)
     Sportradar::Ncaafb::Client.define_singleton_method(:new) { client }
     yield
   ensure
     Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
+  end
+
+  test "shows the cached play-by-play fetch time and reload semantics" do
+    client = Object.new
+    client.define_singleton_method(:game_play_by_play) { |_| { "periods" => [] } }
+    client.define_singleton_method(:request_metadata) do
+      [ { path: "games/game-id/pbp", source: :cached, fetched_at: Time.utc(2026, 11, 12, 9, 0) } ]
+    end
+    with_client(client) { get game_path("game-id") }
+    assert_select ".freshness", text: /Play-by-play: Cached; fetched Nov 12, 2026 at 09:00:00 UTC/
+    assert_select ".freshness", text: /does not force an upstream refresh/
+    assert_select "a", text: /Reload game/
   end
 
   test "renders plays and standalone events in feed order with scores and statistics" do
