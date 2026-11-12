@@ -105,4 +105,13 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     with_client(client) { get root_path, params: { season: "2001" } }
     assert_select "[role=alert]", text: /2001.*not found/
   end
+
+  test "displays invalid quota configuration" do
+    original = ENV["SPORTRADAR_QUOTA_LIMIT"]
+    ENV["SPORTRADAR_QUOTA_LIMIT"] = "0"
+    get root_path, params: { season: "2020" }
+    assert_select "[role=alert]", text: /quota settings/
+  ensure
+    ENV["SPORTRADAR_QUOTA_LIMIT"] = original
+  end
 end

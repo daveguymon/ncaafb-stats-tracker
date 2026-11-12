@@ -41,6 +41,8 @@ module Sportradar
                      language: "en",
                      cache: Rails.cache,
                      coordinator: nil,
+                     quota_limit: ENV["SPORTRADAR_QUOTA_LIMIT"],
+                     quota_window_seconds: ENV["SPORTRADAR_QUOTA_WINDOW_SECONDS"],
                      open_timeout: 5,
                      read_timeout: 10)
         @api_key = api_key
@@ -48,6 +50,7 @@ module Sportradar
         @language = language
         @cache = cache
         @coordinator = coordinator || RequestCoordinator.new(api_key: api_key, access_level: access_level)
+        @quota_limit, @quota_window_seconds = quota_settings(quota_limit, quota_window_seconds)
         @open_timeout = open_timeout
         @read_timeout = read_timeout
         @request_metadata = []
@@ -138,9 +141,28 @@ module Sportradar
         end
       rescue RequestCoordinator::Busy => e
         raise RateLimitError, e.message
+      rescue RequestCoordinator::StateError, SystemCallError => e
+        raise Error, "Sportradar request coordination failed: #{e.class}"
       end
 
       private
+
+      def quota_settings(limit, window)
+        if limit.blank?
+          raise ConfigurationError, "SPORTRADAR_QUOTA_LIMIT is required in production" if Rails.env.production?
+          raise ConfigurationError, "SPORTRADAR_QUOTA_LIMIT is required when a quota window is set" if window.present?
+
+          return [ nil, nil ]
+        end
+
+        limit = Integer(limit)
+        window = Integer(window.presence || 86_400)
+        raise ArgumentError unless limit.positive? && window.positive?
+
+        [ limit, window ]
+      rescue ArgumentError, TypeError
+        raise ConfigurationError, "Sportradar quota limit and window must be positive integers"
+      end
 
       def read_cached(key, legacy_key, path)
         cached = @cache.read(key)
@@ -171,6 +193,7 @@ module Sportradar
         attempts = 0
         loop do
           gate.wait!
+          gate.reserve!(limit: @quota_limit, window_seconds: @quota_window_seconds)
           gate.defer!(1) if @access_level == "trial"
           response = http.request(req)
           return handle(response) unless response.code.to_i == 429

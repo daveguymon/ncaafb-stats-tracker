@@ -99,4 +99,192 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     [ ready_read, ready_write, done_read, done_write ].each { |io| io.close unless io.closed? }
     Process.wait(child) if child
   end
+
+  test "enforces a rolling budget across instances and keeps cooldowns independent" do
+    travel_to Time.utc(2026, 11, 12, 12) do
+      coordinator.synchronize { |gate| gate.reserve!(limit: 2, window_seconds: 60) }
+      coordinator.synchronize do |gate|
+        gate.reserve!(limit: 2, window_seconds: 60)
+        gate.defer!(0)
+      end
+      assert_raises(Sportradar::Ncaafb::RequestCoordinator::Busy) do
+        coordinator.synchronize { |gate| gate.reserve!(limit: 2, window_seconds: 60) }
+      end
+      coordinator("other-key").synchronize { |gate| gate.reserve!(limit: 2, window_seconds: 60) }
+    end
+    travel_to Time.utc(2026, 11, 12, 12, 1) do
+      coordinator.synchronize { |gate| gate.reserve!(limit: 2, window_seconds: 60) }
+    end
+  end
+
+  test "shares the rolling budget with another process" do
+    coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
+    reader, writer = IO.pipe
+    child = fork do
+      reader.close
+      begin
+        coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
+        writer.write("allowed")
+      rescue Sportradar::Ncaafb::RequestCoordinator::Busy
+        writer.write("blocked")
+      ensure
+        writer.close
+      end
+      exit! 0
+    end
+    writer.close
+    assert_equal "blocked", reader.read
+    _, status = Process.wait2(child)
+    child = nil
+    assert status.success?
+  ensure
+    reader.close unless reader.closed?
+    writer.close unless writer.closed?
+    Process.wait(child) if child
+  end
+
+  test "migrates a legacy cooldown and rejects corrupt coordination state" do
+    path = @directory.join("#{Digest::SHA256.hexdigest("production\0key")}.lock")
+    File.write(path, "0.0")
+    coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
+    assert_raises(Sportradar::Ncaafb::RequestCoordinator::Busy) do
+      coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
+    end
+    File.write(path, "{invalid")
+    assert_raises(Sportradar::Ncaafb::RequestCoordinator::StateError) do
+      coordinator.synchronize { |gate| gate.wait! }
+    end
+  end
+
+  test "counts concurrent cache misses against the same budget" do
+    clients = 8.times.map do
+      Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+        cache: ActiveSupport::Cache::MemoryStore.new, coordinator: coordinator,
+        quota_limit: 3, quota_window_seconds: 60)
+    end
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    requests = Queue.new
+    fake.define_singleton_method(:request) { |_| requests << true; Struct.new(:code, :body).new("200", '{"ok":true}') }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      threads = clients.map do |client|
+        Thread.new do
+          client.league_hierarchy
+          :allowed
+        rescue Sportradar::Ncaafb::Client::RateLimitError
+          :blocked
+        end
+      end
+      results = threads.map(&:value)
+      assert_equal 3, results.count(:allowed)
+      assert_equal 5, results.count(:blocked)
+      assert_equal 3, requests.size
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "counts upstream failures and retries but serves cached responses after exhaustion" do
+    cache = ActiveSupport::Cache::MemoryStore.new
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: cache, coordinator: coordinator, quota_limit: 2, quota_window_seconds: 60)
+    responses = [
+      Struct.new(:code, :body).new("200", '{"ok":true}'),
+      Struct.new(:code, :body).new("429", "")
+    ]
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:request) { |_| responses.shift }
+    responses.last.define_singleton_method(:[]) { |_| "0" }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      assert_equal({ "ok" => true }, client.league_hierarchy)
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.game_summary("game") }
+      assert_empty responses
+      assert_equal({ "ok" => true }, client.league_hierarchy)
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.game_summary("other") }
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "counts a not-found response against the budget" do
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator,
+      quota_limit: 1, quota_window_seconds: 60)
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    requests = Queue.new
+    fake.define_singleton_method(:request) { |_| requests << true; Struct.new(:code, :body).new("404", "") }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      assert_raises(Sportradar::Ncaafb::Client::NotFoundError) { client.league_hierarchy }
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.league_hierarchy }
+      assert_equal 1, requests.size
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "counts each retry even when the retry succeeds" do
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator,
+      quota_limit: 2, quota_window_seconds: 60)
+    rate_limited = Struct.new(:code, :body).new("429", "")
+    rate_limited.define_singleton_method(:[]) { |_| "0" }
+    responses = [ rate_limited, Struct.new(:code, :body).new("200", '{"ok":true}') ]
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:request) { |_| responses.shift }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      assert_equal({ "ok" => true }, client.league_hierarchy)
+      assert_empty responses
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.league_hierarchy }
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "counts a failed network attempt against the budget" do
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator,
+      quota_limit: 1, quota_window_seconds: 60)
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:request) { |_| raise Errno::ECONNRESET }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      assert_raises(Sportradar::Ncaafb::Client::Error) { client.league_hierarchy }
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.league_hierarchy }
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "surfaces corrupt coordination state as an error without making a request" do
+    path = @directory.join("#{Digest::SHA256.hexdigest("production\0key")}.lock")
+    File.write(path, "{invalid")
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator,
+      quota_limit: 1, quota_window_seconds: 60)
+    error = assert_raises(Sportradar::Ncaafb::Client::Error) { client.league_hierarchy }
+    assert_match(/coordination failed/, error.message)
+  end
 end

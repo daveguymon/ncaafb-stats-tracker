@@ -23,4 +23,14 @@ class SportradarControllerTest < ActionDispatch::IntegrationTest
   ensure
     Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
   end
+
+  test "returns 503 for invalid quota configuration" do
+    original = ENV["SPORTRADAR_QUOTA_LIMIT"]
+    ENV["SPORTRADAR_QUOTA_LIMIT"] = "0"
+    get "/sportradar/hierarchy"
+    assert_response :service_unavailable
+    assert_match(/not configured/, response.parsed_body.fetch("error"))
+  ensure
+    ENV["SPORTRADAR_QUOTA_LIMIT"] = original
+  end
 end

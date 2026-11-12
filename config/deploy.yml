@@ -40,14 +40,15 @@ registry:
 env:
   secret:
     - RAILS_MASTER_KEY
+    - SPORTRADAR_API_KEY
   clear:
-    # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
-    # When you start using multiple servers, you should split out job processing to a dedicated machine.
-    SOLID_QUEUE_IN_PUMA: true
-
-    # Set number of processes dedicated to Solid Queue (default: 1)
-    # JOB_CONCURRENCY: 3
-
+    # Adjust for your Sportradar plan and any other clients sharing the key.
+    SPORTRADAR_ACCESS_LEVEL: trial
+    SPORTRADAR_QUOTA_LIMIT: 25
+    SPORTRADAR_QUOTA_WINDOW_SECONDS: 86400
+    # Set these when serving through a trusted TLS-terminating proxy.
+    # APP_HOST: app.example.com
+    # FORCE_SSL: true
     # Set number of cores available to the application on each server (default: 1).
     # WEB_CONCURRENCY: 2
 

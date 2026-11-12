@@ -20,6 +20,8 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
 
     def wait!; end
 
+    def reserve!(limit:, window_seconds:); end
+
     def defer!(delay)
       @delays << delay
     end
@@ -69,6 +71,22 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
   test "requires api key" do
     c = Sportradar::Ncaafb::Client.new(api_key: nil)
     assert_raises(Sportradar::Ncaafb::Client::ConfigurationError) { c.league_hierarchy }
+  end
+
+  test "validates quota settings and requires a limit in production" do
+    [ "0", "-1", "invalid" ].each do |value|
+      assert_raises(Sportradar::Ncaafb::Client::ConfigurationError) { client(quota_limit: value) }
+      assert_raises(Sportradar::Ncaafb::Client::ConfigurationError) { client(quota_limit: 10, quota_window_seconds: value) }
+    end
+    assert_raises(Sportradar::Ncaafb::Client::ConfigurationError) { client(quota_limit: nil, quota_window_seconds: 60) }
+    original_env = Rails.env
+    begin
+      Rails.env = "production"
+      assert_raises(Sportradar::Ncaafb::Client::ConfigurationError) { client(quota_limit: nil, quota_window_seconds: nil) }
+      assert_instance_of Sportradar::Ncaafb::Client, client(quota_limit: 10, quota_window_seconds: nil)
+    ensure
+      Rails.env = original_env
+    end
   end
 
   test "rejects bad season type and ids" do

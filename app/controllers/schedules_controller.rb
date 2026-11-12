@@ -15,8 +15,9 @@ class SchedulesController < ApplicationController
     @games = season_games.select { |game| [ game.dig("home", "id"), game.dig("away", "id") ].include?(@team[:id]) }
     @games = @games.sort_by { |game| [ game_date(game).nil? ? 1 : 0, game_date(game) || Time.at(0) ] }
     @records = Sportradar::Ncaafb::SeasonRecords.new(season_games).for_games(@games)
-  rescue Sportradar::Ncaafb::Client::ConfigurationError
-    @error = "The Sportradar API key is not configured. Set SPORTRADAR_API_KEY and restart the app."
+  rescue Sportradar::Ncaafb::Client::ConfigurationError => error
+    Rails.logger.error("Sportradar configuration error: #{error.message}")
+    @error = "Sportradar is not configured correctly. Check the API key and quota settings."
   rescue Sportradar::Ncaafb::Client::RateLimitError
     @error = "Sportradar's request limit was reached. Try again later or check your account quota."
   rescue Sportradar::Ncaafb::Client::NotFoundError

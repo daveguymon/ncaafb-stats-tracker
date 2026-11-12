@@ -1,9 +1,11 @@
 class SportradarController < ApplicationController
   # Handlers are matched last-to-first, so the generic error goes first.
-  rescue_from Sportradar::Ncaafb::Client::Error do
+  rescue_from Sportradar::Ncaafb::Client::Error do |error|
+    Rails.logger.error("Sportradar request failed: #{error.class}: #{error.message}")
     render json: { error: "Upstream Sportradar error" }, status: :bad_gateway
   end
-  rescue_from Sportradar::Ncaafb::Client::ConfigurationError do
+  rescue_from Sportradar::Ncaafb::Client::ConfigurationError do |error|
+    Rails.logger.error("Sportradar configuration error: #{error.message}")
     render json: { error: "Sportradar API is not configured" }, status: :service_unavailable
   end
   rescue_from Sportradar::Ncaafb::Client::NotFoundError do

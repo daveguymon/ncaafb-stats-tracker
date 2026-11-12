@@ -7,8 +7,9 @@ class GamesController < ApplicationController
     @periods = @game["periods"] || []
   rescue ArgumentError
     @error = "Invalid game ID."
-  rescue Sportradar::Ncaafb::Client::ConfigurationError
-    @error = "The Sportradar API key is not configured. Set SPORTRADAR_API_KEY and restart the app."
+  rescue Sportradar::Ncaafb::Client::ConfigurationError => error
+    Rails.logger.error("Sportradar configuration error: #{error.message}")
+    @error = "Sportradar is not configured correctly. Check the API key and quota settings."
   rescue Sportradar::Ncaafb::Client::NotFoundError
     @error = "Play-by-play data for this game was not found."
   rescue Sportradar::Ncaafb::Client::RateLimitError
