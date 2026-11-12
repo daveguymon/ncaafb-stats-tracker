@@ -17,7 +17,7 @@
         <p class="scoreboard-venue">Feed summary score &mdash; not the replay score</p>
         <div class="scoreboard-teams">
           <div class="scoreboard-team"><span>AWAY</span><strong><%= game_team_name(away) %></strong><b><%= away["points"].nil? ? "–" : away["points"] %></b></div>
-          <div class="scoreboard-status"><span>VS</span><strong><%= @game["status"].presence&.tr("_-", " ")&.upcase || "STATUS TBD" %></strong></div>
+          <div class="scoreboard-status"><span>VS</span><strong><%= game_status_label(@game["status"]) %></strong></div>
           <div class="scoreboard-team"><span>HOME</span><strong><%= game_team_name(home) %></strong><b><%= home["points"].nil? ? "–" : home["points"] %></b></div>
         </div>
         <% if summary.dig("venue", "name").present? %><p class="scoreboard-venue"><%= summary.dig("venue", "name") %></p><% end %>

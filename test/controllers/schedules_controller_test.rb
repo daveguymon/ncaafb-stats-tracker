@@ -39,11 +39,11 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
   test "defaults to Utah and current season and orders games by date" do
     games = [
       { "id" => "unknown", "home" => { "id" => "utah" }, "away" => { "name" => "Unknown date opponent" } },
-      { "id" => "tbd", "status" => "time-tbd", "scheduled" => "2026-09-10T00:00:00Z", "home" => { "id" => "utah" }, "away" => { "name" => "TBD opponent" } },
-      { "id" => "late", "status" => "scheduled", "scheduled" => "2026-10-10T18:00:00Z", "away" => { "id" => "utah" }, "home" => { "name" => "Later opponent" } },
+      { "id" => "tbd", "status" => "time-tbd", "scheduled" => "2026-09-10T00:00:00Z", "home" => { "id" => "utah" }, "away" => { "name" => "TBD opponent" }, "venue" => { "name" => "", "city" => "Somewhere" } },
+      { "id" => "late", "status" => "scheduled", "scheduled" => "2026-10-10T18:00:00Z", "away" => { "id" => "utah" }, "home" => { "name" => "Later opponent" }, "venue" => { "name" => "Neutral Field <West>", "state" => "CA" } },
       { "id" => "early", "scheduled" => "2026-09-05T18:00:00Z", "status" => "closed",
         "home" => { "id" => "utah", "name" => "Utah Utes" }, "away" => { "id" => "opponent", "name" => "Early opponent" },
-        "week" => "1", "season_type" => "REG", "scoring" => { "home_points" => 28, "away_points" => 14 } }
+        "week" => "1", "season_type" => "REG", "venue" => { "name" => "Example Stadium", "city" => "Salt Lake City", "state" => "UT" }, "scoring" => { "home_points" => 28, "away_points" => 14 } }
     ]
     requested_years = []
     client = Object.new
@@ -58,7 +58,13 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal [ "2026" ], requested_years
     assert_select "input[name=season][value='2026']"
-    assert_select ".team-selection", text: /Utah Utes/
+    assert_select ".team-info", text: /Utah Utes.*This tracker covers Utah football/m
+    assert_select ".section-heading", text: /UTAH SCHEDULE/
+    assert_select ".flow li:first-child", text: /Season year.*Utah Utes.*2026/m
+    assert_select ".team-info .check", count: 0
+    assert_no_match(/Selected team|Your selection/i, response.body)
+    assert_select ".brand img.brand-mark[alt=''][src*='utah-logo']", count: 1
+    assert_select ".team-info img.team-badge[alt=''][src*='utah-logo']", count: 1
     assert_select ".game-card", count: 4
     assert_select ".game-card:first-child", text: /Early opponent/
     assert_select ".game-card:last-child", text: /Date TBD/
@@ -66,6 +72,16 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".game-card:first-child", text: /WEEK 1/
     assert_select ".game-card:first-child", text: /14.*28/m
     assert_select ".game-card:first-child .status", text: "FINAL"
+    assert_select ".list-label", text: /LOCATION/
+    assert_select ".game-card:first-child .game-venue strong", text: "Example Stadium"
+    assert_select ".game-card:first-child .game-venue small", text: "Salt Lake City, UT"
+    assert_select ".game-card:nth-child(2) .game-venue", text: /Stadium unavailable.*Somewhere/m
+    assert_select ".game-card:nth-child(2) .game-venue small", text: "Somewhere"
+    assert_select ".game-card:nth-child(3) .game-venue strong", text: "Neutral Field <West>"
+    assert_select ".game-card:nth-child(3) .game-venue small", text: "CA"
+    assert_select ".game-card:last-child .game-venue", text: /Stadium unavailable/
+    assert_select ".game-card:last-child .game-venue small", count: 0
+    assert_select ".game-venue west", count: 0
     assert_select ".game-card:nth-child(2) .status", text: "TIME TBD"
     assert_select ".game-card:nth-child(3) .status", text: "SCHEDULED"
     assert_select ".game-card:last-child .status", text: "STATUS TBD"

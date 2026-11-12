@@ -26,8 +26,13 @@ class DemoModeTest < ActionDispatch::IntegrationTest
     assert_select "input[name=season][value='2024']"
     assert_select ".game-card", count: 1
     assert_select ".game-card", text: /Sample State/
+    assert_select ".game-card .game-venue", text: /Illustrative stadium/
+    assert_select ".game-card .game-venue small", text: "Sample City, UT"
     assert_select ".game-card .team-record", text: "0-0", count: 2
     assert_select ".flow", text: /Bundled sample/
+    assert_select ".flow li:first-child", text: /Season year.*Utah Utes.*2024/m
+    assert_select ".team-info", text: /This tracker covers Utah football/
+    assert_no_match(/Selected team|Your selection/i, response.body)
     assert_select ".freshness", count: 0
     assert_select ".data-source", text: /SYNTHETIC DEMO DATA/
 

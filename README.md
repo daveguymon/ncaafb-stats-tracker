@@ -6,6 +6,8 @@ To explore without a key or network requests, see [Demo mode](#demo-mode).
 Visit `http://localhost:3000` to view Utah's schedule. Enter a four-digit year
 to load a different season; games are ordered by scheduled time (UTC), with
 games without a known time last. Expand a game to inspect its response data.
+The location comes from the schedule feed, including the stadium name, city
+and state when available; missing information is not inferred from the home team.
 Matchup records show completed regular-season and postseason results before
 each game, based on the available schedule feed. Future games show only
 results available so far. Where a record cannot be determined it is marked

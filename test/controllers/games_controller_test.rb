@@ -52,10 +52,12 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
     with_client(client) { get game_path("game-id", season: "2025") }
 
     assert_response :success
+    assert_select ".brand img.brand-mark[alt=''][src*='utah-logo']", count: 1
     assert_equal [ "game-id" ], requested
     assert_select "a[href='/?season=2025']", text: /Back to schedule/
     assert_select ".scoreboard-team", text: /Utah Utes.*21/m
     assert_select ".scoreboard-team", text: /Idaho Vandals.*7/m
+    assert_select ".scoreboard-status strong", text: "FINAL"
     assert_select ".period-nav a", count: 2
     assert_select "#period-1 .drive-heading", text: /Utah Utes drive.*2 plays.*10 yards/m
     assert_select ".game-event", count: 4
@@ -77,6 +79,7 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
     client.define_singleton_method(:game_play_by_play) { |_| { "status" => "scheduled", "periods" => [] } }
     with_client(client) { get game_path("game-id") }
     assert_response :success
+    assert_select ".scoreboard-status strong", text: "SCHEDULED"
     assert_select ".state-message", text: /No play-by-play available yet/
     assert_select ".replay", count: 0
   end

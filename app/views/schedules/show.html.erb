@@ -14,10 +14,10 @@
 
   <section class="workspace" aria-label="Schedule explorer">
     <aside class="sidebar">
-      <div class="section-heading"><span>01</span> YOUR SELECTION</div>
+      <div class="section-heading"><span>01</span> UTAH SCHEDULE</div>
       <form action="<%= root_path %>" method="get">
         <div class="field-label">TEAM</div>
-        <div class="team-selection"><span class="team-badge">U</span><span>Utah Utes<small>Selected team</small></span><span class="check" aria-hidden="true">&#10003;</span></div>
+        <div class="team-info"><%= image_tag "utah-logo.png", class: "team-badge", alt: "", width: 42, height: 42 %><span>Utah Utes<small>This tracker covers Utah football</small></span></div>
         <label for="season">SEASON YEAR</label>
         <input id="season" name="season" type="number" inputmode="numeric" min="1000" max="9999" step="1" value="<%= @season %>" required>
         <p class="field-help"><%= demo_mode? ? "Demo data is available for 2024 only." : "Enter a past or current season year." %></p>
@@ -28,7 +28,7 @@
         <div class="section-heading"><span>02</span> REQUEST FLOW</div>
         <p>How your schedule gets here</p>
         <ol>
-          <li><strong>Your selection</strong><small>Utah Utes &middot; <%= @season %></small></li>
+          <li><strong>Season year</strong><small>Utah Utes &middot; <%= @season %></small></li>
           <% if demo_mode? %>
             <li><strong>Bundled sample</strong><small>Loads synthetic schedule data</small></li>
           <% else %>
@@ -58,10 +58,10 @@
       <% elsif @games.empty? %>
         <div class="state-message"><strong>No games found</strong><p>No Utah games were returned for this season. Try another year.</p></div>
       <% else %>
-        <div class="list-label"><span>DATE / WEEK</span><span>MATCHUP</span><span>RESULT / STATUS</span></div>
+        <div class="list-label" aria-hidden="true"><span>DATE / WEEK</span><span>MATCHUP</span><span>LOCATION</span><span>RESULT / STATUS</span></div>
         <ol class="game-list">
           <% @games.each do |game| %>
-            <% home = game["home"] || {}; away = game["away"] || {}; score = game["scoring"] || {}; date = game_date(game) %>
+            <% home = game["home"] || {}; away = game["away"] || {}; score = game["scoring"] || {}; venue = game["venue"] || {}; city_state = [venue["city"], venue["state"]].compact_blank.join(", "); date = game_date(game) %>
             <li class="game-card">
               <div class="game-date">
                 <% if date %>
@@ -77,9 +77,14 @@
                 <span class="versus">at</span>
                 <div><span class="matchup-label">HOME</span><strong><%= home["name"].presence || home["alias"].presence || "Opponent TBD" %></strong><span class="team-record" aria-label="Record entering game: <%= schedule_record(@records[game.object_id]["home"]) %>"><%= schedule_record(@records[game.object_id]["home"]) %></span></div>
               </div>
+              <div class="game-venue">
+                <span class="game-venue-label">Location: </span>
+                <strong><%= venue["name"].presence || "Stadium unavailable" %></strong>
+                <% if city_state.present? %><small><%= city_state %></small><% end %>
+              </div>
               <div class="game-result">
                 <% if !score["away_points"].nil? && !score["home_points"].nil? %><strong><%= score["away_points"] %> <span>–</span> <%= score["home_points"] %></strong><% end %>
-                <span class="status"><%= game["status"] == "closed" ? "FINAL" : (game["status"].presence&.tr("_-", " ")&.upcase || "STATUS TBD") %></span>
+                <span class="status"><%= game_status_label(game["status"]) %></span>
               </div>
               <% if game["id"].present? %>
                 <%= link_to "View play-by-play →", game_path(game["id"], season: @season), class: "game-link",
