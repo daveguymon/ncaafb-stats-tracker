@@ -1,5 +1,19 @@
 # Utah Football Stats Tracker
 
+## Screenshots
+
+**Season schedule** — browse Utah games, locations, results, and data freshness.
+
+![Utah season schedule showing matchups, locations, scores, and data freshness](docs/screenshots/season-schedule.png)
+
+**Game center** — view the game summary and play-by-play freshness.
+
+![Game center showing the Utah and Iowa State scoreboard and play-by-play section](docs/screenshots/game-summary.png)
+
+**Replay timeline** — step through events and explore drives by period.
+
+![Replay controls, quarter navigation, and play-by-play events for a Utah drive](docs/screenshots/replay-timeline.png)
+
 ## Quick start
 
 With Ruby from `.ruby-version` and Bundler installed, run:
