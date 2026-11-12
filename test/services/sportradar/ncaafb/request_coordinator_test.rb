@@ -23,6 +23,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     requests = Queue.new
     fake.define_singleton_method(:request) do |_|
       requests << true
@@ -143,6 +144,40 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     Process.wait(child) if child
   end
 
+  test "limits individual visitors while allowing cached responses and other visitors" do
+    cache = ActiveSupport::Cache::MemoryStore.new
+    build_client = ->(visitor) {
+      Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+        cache: cache, coordinator: coordinator, visitor_key: visitor,
+        quota_limit: 100, quota_window_seconds: 600)
+    }
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
+    attempts = 0
+    fake.define_singleton_method(:request) { |_| attempts += 1; Struct.new(:code, :body).new("200", '{"ok":true}') }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      travel_to Time.utc(2026, 11, 12, 12) do
+        visitor = build_client.call("visitor-a")
+        25.times { |index| visitor.game_summary("game-#{index}") }
+        assert_equal({ "ok" => true }, visitor.game_summary("game-0"))
+        assert_raises(Sportradar::Ncaafb::Client::VisitorRateLimitError) { visitor.game_summary("next") }
+        assert_equal 25, attempts
+        assert_equal({ "ok" => true }, build_client.call("visitor-b").game_summary("next"))
+      end
+      travel_to Time.utc(2026, 11, 12, 12, 2) do
+        assert_equal({ "ok" => true }, build_client.call("visitor-a").game_summary("after-window"))
+      end
+      assert_equal 27, attempts
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
   test "migrates a legacy cooldown and rejects corrupt coordination state" do
     path = @directory.join("#{Digest::SHA256.hexdigest("production\0key")}.lock")
     File.write(path, "0.0")
@@ -150,9 +185,36 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     assert_raises(Sportradar::Ncaafb::RequestCoordinator::Busy) do
       coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
     end
-    File.write(path, "{invalid")
+    File.write(path.sub_ext(".json"), "{invalid")
     assert_raises(Sportradar::Ncaafb::RequestCoordinator::StateError) do
       coordinator.synchronize { |gate| gate.wait! }
+    end
+  end
+
+  test "rejects missing or empty state after initialization" do
+    coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
+    state_path = @directory.join("#{Digest::SHA256.hexdigest("production\0key")}.json")
+    File.write(state_path, "")
+    assert_raises(Sportradar::Ncaafb::RequestCoordinator::StateError) do
+      coordinator.synchronize { |gate| gate.wait! }
+    end
+    File.unlink(state_path)
+    assert_raises(Sportradar::Ncaafb::RequestCoordinator::StateError) do
+      coordinator.synchronize { |gate| gate.wait! }
+    end
+  end
+
+  test "retains previous state when atomic replacement fails" do
+    coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
+    original = File.method(:rename)
+    File.define_singleton_method(:rename) { |*| raise Errno::EIO }
+    begin
+      assert_raises(Errno::EIO) { coordinator.synchronize { |gate| gate.defer!(60) } }
+    ensure
+      File.define_singleton_method(:rename, original)
+    end
+    assert_raises(Sportradar::Ncaafb::RequestCoordinator::Busy) do
+      coordinator.synchronize { |gate| gate.reserve!(limit: 1, window_seconds: 60) }
     end
   end
 
@@ -166,6 +228,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     requests = Queue.new
     fake.define_singleton_method(:request) { |_| requests << true; Struct.new(:code, :body).new("200", '{"ok":true}') }
     original = Net::HTTP.method(:new)
@@ -188,6 +251,28 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
+  test "does not retry a failed connection outside the budget" do
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator,
+      quota_limit: 1, quota_window_seconds: 60)
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
+    attempts = 0
+    fake.define_singleton_method(:request) { |_| attempts += 1; raise EOFError }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      assert_raises(Sportradar::Ncaafb::Client::Error) { client.league_hierarchy }
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.league_hierarchy }
+      assert_equal 1, attempts
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
   test "counts upstream failures and retries but serves cached responses after exhaustion" do
     cache = ActiveSupport::Cache::MemoryStore.new
     client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
@@ -200,6 +285,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     fake.define_singleton_method(:request) { |_| responses.shift }
     responses.last.define_singleton_method(:[]) { |_| "0" }
     original = Net::HTTP.method(:new)
@@ -223,6 +309,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     requests = Queue.new
     fake.define_singleton_method(:request) { |_| requests << true; Struct.new(:code, :body).new("404", "") }
     original = Net::HTTP.method(:new)
@@ -247,6 +334,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     fake.define_singleton_method(:request) { |_| responses.shift }
     original = Net::HTTP.method(:new)
     Net::HTTP.define_singleton_method(:new) { |*| fake }
@@ -267,6 +355,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     fake.define_singleton_method(:request) { |_| raise Errno::ECONNRESET }
     original = Net::HTTP.method(:new)
     Net::HTTP.define_singleton_method(:new) { |*| fake }

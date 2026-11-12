@@ -21,10 +21,8 @@ module Sportradar
       end
 
       def season_games(year, season_types: %w[REG PST])
-        season_types.flat_map do |type|
-          season_schedule(year, type).fetch("weeks").flat_map do |week|
-            week.fetch("games").map { |game| game.merge("week" => week["title"], "season_type" => type.to_s.upcase) }
-          end
+        Array(season_types).flat_map do |type|
+          ScheduleGames.flatten(season_schedule(year, type), type)
         end
       end
 

@@ -63,7 +63,7 @@ class DemoModeTest < ActionDispatch::IntegrationTest
     fake.define_singleton_method(:season_games) { |_| [] }
     fake.define_singleton_method(:request_metadata) { [] }
     fake.define_singleton_method(:league_hierarchy) { { "live" => true } }
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { fake }
+    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| fake }
 
     get root_path, params: { season: "2024" }
     assert_response :success

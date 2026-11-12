@@ -16,7 +16,7 @@ class SportradarControllerTest < ActionDispatch::IntegrationTest
       raise Sportradar::Ncaafb::Client::RateLimitError, "Rate limited"
     end
     original = Sportradar::Ncaafb::Client.method(:new)
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { client }
+    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| client }
     get "/sportradar/hierarchy"
     assert_response :too_many_requests
     assert_match(/check your account quota/, response.parsed_body.fetch("error"))
@@ -32,5 +32,33 @@ class SportradarControllerTest < ActionDispatch::IntegrationTest
     assert_match(/not configured/, response.parsed_body.fetch("error"))
   ensure
     ENV["SPORTRADAR_QUOTA_LIMIT"] = original
+  end
+
+  test "returns a controlled upstream error for invalid provider data" do
+    client = Object.new
+    client.define_singleton_method(:league_hierarchy) do
+      raise Sportradar::Ncaafb::Client::Error, "Sportradar returned invalid JSON"
+    end
+    original = Sportradar::Ncaafb::Client.method(:new)
+    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| client }
+    get "/sportradar/hierarchy"
+    assert_response :bad_gateway
+    assert_equal "Upstream Sportradar error", response.parsed_body.fetch("error")
+  ensure
+    Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
+  end
+
+  test "distinguishes visitor throttling from the provider quota" do
+    client = Object.new
+    client.define_singleton_method(:league_hierarchy) do
+      raise Sportradar::Ncaafb::Client::VisitorRateLimitError, "Limited"
+    end
+    original = Sportradar::Ncaafb::Client.method(:new)
+    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| client }
+    get "/sportradar/hierarchy"
+    assert_response :too_many_requests
+    assert_match(/Too many new data requests/, response.parsed_body.fetch("error"))
+  ensure
+    Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
   end
 end

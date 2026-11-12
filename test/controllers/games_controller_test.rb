@@ -4,7 +4,7 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
   def with_client(client)
     original = Sportradar::Ncaafb::Client.method(:new)
     client.define_singleton_method(:request_metadata) { [] } unless client.respond_to?(:request_metadata)
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { client }
+    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| client }
     yield
   ensure
     Sportradar::Ncaafb::Client.define_singleton_method(:new, original)

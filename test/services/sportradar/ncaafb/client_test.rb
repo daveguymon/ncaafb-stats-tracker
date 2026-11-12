@@ -20,7 +20,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
 
     def wait!; end
 
-    def reserve!(limit:, window_seconds:); end
+    def reserve!(limit:, window_seconds:, visitor_key:, visitor_limit:, visitor_window_seconds:); end
 
     def defer!(delay)
       @delays << delay
@@ -37,6 +37,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     fake.define_singleton_method(:request) { |req| captured << req; response }
     original = Net::HTTP.method(:new)
     Net::HTTP.define_singleton_method(:new) { |*| fake }
@@ -65,6 +66,13 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     end
     stub_http(FakeResponse.new("500", "")) do
       assert_raises(Sportradar::Ncaafb::Client::Error) { client.league_hierarchy }
+    end
+  end
+
+  test "maps malformed upstream JSON to a client error without exposing the response" do
+    stub_http(FakeResponse.new("200", "not-json-secret")) do
+      error = assert_raises(Sportradar::Ncaafb::Client::Error) { client.league_hierarchy }
+      assert_equal "Sportradar returned invalid JSON", error.message
     end
   end
 
@@ -106,6 +114,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     fake.define_singleton_method(:request) { |_| responses.shift }
     original = Net::HTTP.method(:new)
     Net::HTTP.define_singleton_method(:new) { |*| fake }
@@ -133,8 +142,33 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     reqs = stub_http(FakeResponse.new("200", '{"ok":true}')) do
       2.times { assert_equal({ "ok" => true }, c.league_hierarchy) }
     end
-
     assert_equal 1, reqs.size
+  end
+
+  test "instruments cache and HTTP activity without including request identifiers" do
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
+    fake.define_singleton_method(:request) { |_| FakeResponse.new("200", '{"ok":true}') }
+    client = Sportradar::Ncaafb::Client.new(api_key: "test-key", access_level: "production",
+      cache: ActiveSupport::Cache::MemoryStore.new, coordinator: ImmediateCoordinator.new,
+      http_factory: ->(_, _) { fake })
+    events = []
+    subscriber = ActiveSupport::Notifications.subscribe(/\Asportradar\./) do |name, _start, _finish, _id, payload|
+      events << [ name, payload ]
+    end
+    begin
+      2.times { client.game_summary("private-game-id") }
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+    assert_equal [ "sportradar.cache", "sportradar.upstream", "sportradar.cache" ], events.map(&:first)
+    assert_equal [ "miss", nil, "hit" ], events.map { |_, payload| payload[:outcome] }
+    assert_equal 200, events[1][1][:status]
+    refute_includes events.inspect, "private-game-id"
+    refute_includes events.inspect, "test-key"
   end
 
   test "records fetch time and cache source while preserving the original payload" do
@@ -217,6 +251,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     fake.define_singleton_method(:use_ssl=) { |_| }
     fake.define_singleton_method(:open_timeout=) { |_| }
     fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |value| raise "Implicit HTTP retries enabled" unless value == 0 }
     fake.define_singleton_method(:request) { |_| responses.shift }
     original = Net::HTTP.method(:new)
     Net::HTTP.define_singleton_method(:new) { |*| fake }

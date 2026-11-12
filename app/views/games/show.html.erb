@@ -12,16 +12,7 @@
       <div class="state-message error" role="alert"><strong>Play-by-play unavailable</strong><p><%= @error %></p></div>
     <% else %>
       <% summary = @game["summary"] || {}; away = summary["away"] || {}; home = summary["home"] || {} %>
-      <section class="scoreboard" aria-label="Game summary">
-        <p class="eyebrow">GAME CENTER <span class="separator">/</span> PLAY-BY-PLAY</p>
-        <p class="scoreboard-venue">Feed summary score &mdash; not the replay score</p>
-        <div class="scoreboard-teams">
-          <div class="scoreboard-team"><span>AWAY</span><strong><%= game_team_name(away) %></strong><b><%= away["points"].nil? ? "–" : away["points"] %></b></div>
-          <div class="scoreboard-status"><span>VS</span><strong><%= game_status_label(@game["status"]) %></strong></div>
-          <div class="scoreboard-team"><span>HOME</span><strong><%= game_team_name(home) %></strong><b><%= home["points"].nil? ? "–" : home["points"] %></b></div>
-        </div>
-        <% if summary.dig("venue", "name").present? %><p class="scoreboard-venue"><%= summary.dig("venue", "name") %></p><% end %>
-      </section>
+      <%= render "scoreboard", game: @game, summary: summary, away: away, home: home %>
 
       <%= render "shared/freshness", entries: @freshness if @freshness.present? %>
       <section class="progression" aria-labelledby="progression-heading">

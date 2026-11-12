@@ -4,7 +4,7 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
   def with_client(client)
     original = Sportradar::Ncaafb::Client.method(:new)
     client.define_singleton_method(:request_metadata) { [] } unless client.respond_to?(:request_metadata)
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { client }
+    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| client }
     yield
   ensure
     Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
@@ -86,8 +86,8 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".game-card:nth-child(3) .status", text: "SCHEDULED"
     assert_select ".game-card:last-child .status", text: "STATUS TBD"
     assert_select ".game-card:first-child details pre", text: /"status": "closed"/
-    assert_select ".game-card:first-child .team-record[aria-label='Record entering game: 0-0']", text: "0-0", count: 2
-    assert_select ".game-card:nth-child(2) .team-record", text: "1-0"
+    assert_select ".game-card:first-child .team-record[aria-label='Record entering game: 0-0 (coverage unverified)']", text: "0-0 (coverage unverified)", count: 2
+    assert_select ".game-card:nth-child(2) .team-record", text: "1-0 (coverage unverified)"
     assert_select ".game-card:last-child .team-record", text: "Record unavailable", count: 2
     assert_select "details pre", text: /"id": "early"/
     assert_select "a[href='/games/early?season=2026']", text: /View play-by-play/
@@ -116,6 +116,10 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     client.define_singleton_method(:season_games) { |_| raise Sportradar::Ncaafb::Client::RateLimitError, "Rate limited" }
     with_client(client) { get root_path, params: { season: "2026" } }
     assert_select "[role=alert]", text: /request limit/
+
+    client.define_singleton_method(:season_games) { |_| raise Sportradar::Ncaafb::Client::VisitorRateLimitError, "Limited" }
+    with_client(client) { get root_path, params: { season: "2026" } }
+    assert_select "[role=alert]", text: /Too many new data requests from this connection/
 
     client.define_singleton_method(:season_games) { |_| raise Sportradar::Ncaafb::Client::NotFoundError, "Not found" }
     with_client(client) { get root_path, params: { season: "2001" } }

@@ -18,6 +18,7 @@ module Sportradar
 
       class ConfigurationError < Error; end
       class RateLimitError < Error; end
+      class VisitorRateLimitError < RateLimitError; end
       class NotFoundError < Error; end
 
       BASE_URL = "https://api.sportradar.com/ncaafb".freeze
@@ -33,6 +34,8 @@ module Sportradar
       TTL_CURRENT_SCHEDULE = 10.minutes
       MAX_RATE_LIMIT_RETRIES = 1
       DEFAULT_RETRY_DELAY = 1
+      VISITOR_LIMIT = 25
+      VISITOR_WINDOW_SECONDS = 120
 
       attr_reader :request_metadata
 
@@ -41,6 +44,8 @@ module Sportradar
                      language: "en",
                      cache: Rails.cache,
                      coordinator: nil,
+                     visitor_key: nil,
+                     http_factory: nil,
                      quota_limit: ENV["SPORTRADAR_QUOTA_LIMIT"],
                      quota_window_seconds: ENV["SPORTRADAR_QUOTA_WINDOW_SECONDS"],
                      open_timeout: 5,
@@ -50,6 +55,8 @@ module Sportradar
         @language = language
         @cache = cache
         @coordinator = coordinator || RequestCoordinator.new(api_key: api_key, access_level: access_level)
+        @visitor_key = visitor_key
+        @http_factory = http_factory || ->(host, port) { Net::HTTP.new(host, port) }
         @quota_limit, @quota_window_seconds = quota_settings(quota_limit, quota_window_seconds)
         @open_timeout = open_timeout
         @read_timeout = read_timeout
@@ -80,12 +87,7 @@ module Sportradar
       def season_games(year, season_types: %w[REG PST])
         Array(season_types).flat_map do |type|
           schedule = season_schedule(year, type)
-          games = Array(schedule["weeks"]).flat_map do |week|
-            Array(week["games"]).map do |game|
-              game.merge("week" => week["title"] || week["sequence"] || week["number"], "season_type" => type.to_s.upcase)
-            end
-          end
-          games
+          ScheduleGames.flatten(schedule, type)
         rescue NotFoundError
           raise unless type.to_s.upcase == "PST"
 
@@ -133,6 +135,7 @@ module Sportradar
           cached = read_cached(key, legacy_key, path)
           next cached[:data] if cached
 
+          ActiveSupport::Notifications.instrument("sportradar.cache", outcome: "miss")
           data = request(path, gate)
           fetched_at = Time.current.utc
           @cache.write(key, { data: data, fetched_at: fetched_at }, expires_in: ttl.respond_to?(:call) ? ttl.call(data) : ttl)
@@ -140,8 +143,13 @@ module Sportradar
           data
         end
       rescue RequestCoordinator::Busy => e
+        ActiveSupport::Notifications.instrument("sportradar.limit", kind: "coordination")
         raise RateLimitError, e.message
+      rescue RequestCoordinator::VisitorBusy => e
+        ActiveSupport::Notifications.instrument("sportradar.limit", kind: "visitor")
+        raise VisitorRateLimitError, e.message
       rescue RequestCoordinator::StateError, SystemCallError => e
+        ActiveSupport::Notifications.instrument("sportradar.coordination_error", error_class: e.class.name)
         raise Error, "Sportradar request coordination failed: #{e.class}"
       end
 
@@ -167,6 +175,7 @@ module Sportradar
       def read_cached(key, legacy_key, path)
         cached = @cache.read(key)
         if cached
+          ActiveSupport::Notifications.instrument("sportradar.cache", outcome: "hit")
           @request_metadata << { path: path, source: :cached, fetched_at: cached[:fetched_at] }
           return cached
         end
@@ -175,16 +184,18 @@ module Sportradar
         legacy = @cache.read(legacy_key) if @language == "en"
         return if legacy.nil?
 
+        ActiveSupport::Notifications.instrument("sportradar.cache", outcome: "hit")
         @request_metadata << { path: path, source: :cached, fetched_at: nil }
         { data: legacy }
       end
 
       def request(path, gate)
         uri = URI("#{BASE_URL}/#{@access_level}/#{VERSION}/#{@language}/#{path}.json")
-        http = Net::HTTP.new(uri.host, uri.port)
+        http = @http_factory.call(uri.host, uri.port)
         http.use_ssl = true
         http.open_timeout = @open_timeout
         http.read_timeout = @read_timeout
+        http.max_retries = 0
 
         req = Net::HTTP::Get.new(uri)
         req["x-api-key"] = @api_key
@@ -193,9 +204,10 @@ module Sportradar
         attempts = 0
         loop do
           gate.wait!
-          gate.reserve!(limit: @quota_limit, window_seconds: @quota_window_seconds)
+          gate.reserve!(limit: @quota_limit, window_seconds: @quota_window_seconds,
+            visitor_key: @visitor_key, visitor_limit: VISITOR_LIMIT, visitor_window_seconds: VISITOR_WINDOW_SECONDS)
           gate.defer!(1) if @access_level == "trial"
-          response = http.request(req)
+          response = request_http(http, req)
           return handle(response) unless response.code.to_i == 429
 
           delay = retry_after(response["Retry-After"])
@@ -206,7 +218,15 @@ module Sportradar
 
           attempts += 1
         end
-      rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, SystemCallError, OpenSSL::SSL::SSLError => e
+      end
+
+      def request_http(http, req)
+        ActiveSupport::Notifications.instrument("sportradar.upstream") do |payload|
+          result = http.request(req)
+          payload[:status] = result.code.to_i
+          result
+        end
+      rescue Net::OpenTimeout, Net::ReadTimeout, EOFError, SocketError, SystemCallError, OpenSSL::SSL::SSLError => e
         raise Error, "Sportradar request failed: #{e.class}"
       end
 
@@ -227,6 +247,9 @@ module Sportradar
         when 429 then raise RateLimitError.new("Rate limit exceeded", status: status)
         else raise Error.new("Sportradar API returned HTTP #{status}", status: status)
         end
+      rescue JSON::ParserError
+        ActiveSupport::Notifications.instrument("sportradar.invalid_response")
+        raise Error, "Sportradar returned invalid JSON"
       end
 
       # Past seasons are final. College seasons run Aug-Jan, so Jan-Feb

@@ -1,0 +1,37 @@
+<% home = game["home"] || {}; away = game["away"] || {}; score = game["scoring"] || {}; venue = game["venue"] || {} %>
+<% city_state = [venue["city"], venue["state"]].compact_blank.join(", "); date = game_date(game) %>
+<% away_record = schedule_record(records["away"], coverage: records["away_coverage"]) %>
+<% home_record = schedule_record(records["home"], coverage: records["home_coverage"]) %>
+<li class="game-card">
+  <div class="game-date">
+    <% if date %>
+      <strong><%= date.utc.strftime("%b %d") %></strong>
+      <small><%= game["status"] == "time-tbd" ? "#{date.utc.year} · Kickoff TBD" : date.utc.strftime("%Y · %H:%M UTC") %></small>
+    <% else %>
+      <strong>Date TBD</strong><small>Time not available</small>
+    <% end %>
+    <span class="week-label"><%= game["season_type"] == "PST" ? "POSTSEASON" : (game["week"].present? ? "WEEK #{game["week"]}" : "REGULAR SEASON") %></span>
+  </div>
+  <div class="matchup">
+    <div><span class="matchup-label">AWAY</span><strong><%= away["name"].presence || away["alias"].presence || "Opponent TBD" %></strong><span class="team-record" aria-label="Record entering game: <%= away_record %>"><%= away_record %></span></div>
+    <span class="versus">at</span>
+    <div><span class="matchup-label">HOME</span><strong><%= home["name"].presence || home["alias"].presence || "Opponent TBD" %></strong><span class="team-record" aria-label="Record entering game: <%= home_record %>"><%= home_record %></span></div>
+  </div>
+  <div class="game-venue">
+    <span class="game-venue-label">Location: </span>
+    <strong><%= venue["name"].presence || "Stadium unavailable" %></strong>
+    <% if city_state.present? %><small><%= city_state %></small><% end %>
+  </div>
+  <div class="game-result">
+    <% if !score["away_points"].nil? && !score["home_points"].nil? %><strong><%= score["away_points"] %> <span>–</span> <%= score["home_points"] %></strong><% end %>
+    <span class="status"><%= game_status_label(game["status"]) %></span>
+  </div>
+  <% if game["id"].present? %>
+    <%= link_to "View play-by-play →", game_path(game["id"], season: season), class: "game-link",
+      "aria-label": "View play-by-play: #{away["name"].presence || "Away team"} at #{home["name"].presence || "Home team"}" %>
+  <% end %>
+  <details class="response-details">
+    <summary>View response data <span aria-hidden="true">+</span></summary>
+    <pre><%= JSON.pretty_generate(game) %></pre>
+  </details>
+</li>

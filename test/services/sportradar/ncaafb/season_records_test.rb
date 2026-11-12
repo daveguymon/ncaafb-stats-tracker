@@ -68,6 +68,23 @@ class Sportradar::Ncaafb::SeasonRecordsTest < ActiveSupport::TestCase
     assert_nil Sportradar::Ncaafb::SeasonRecords.new([ earlier, target ]).for_games([ target ])[target.object_id]["home"]
   end
 
+  test "distinguishes verified counts from unverified or unavailable coverage" do
+    target = game("b", "2025-09-08T18:00:00Z", "utah", "opponent", home_points: 7, away_points: 3)
+    target["home"]["game_number"] = 1
+    target["away"]["game_number"] = 2
+    records = Sportradar::Ncaafb::SeasonRecords.new([ target ]).for_games([ target ]).fetch(target.object_id)
+    assert_equal :complete, records["home_coverage"]
+    assert_equal :unavailable, records["away_coverage"]
+
+    target["status"] = "scheduled"
+    records = Sportradar::Ncaafb::SeasonRecords.new([ target ]).for_games([ target ]).fetch(target.object_id)
+    assert_equal :unverified, records["home_coverage"]
+    assert_equal :unverified, records["away_coverage"]
+    target["season_type"] = "PST"
+    records = Sportradar::Ncaafb::SeasonRecords.new([ target ]).for_games([ target ]).fetch(target.object_id)
+    assert_equal :unverified, records["home_coverage"]
+  end
+
   test "deduplicates repeated schedule entries but rejects conflicting results" do
     first = game("a", "2020-11-22T03:30:00Z", "utah", "usc", home_points: 17, away_points: 33)
     target = game("b", "2020-11-29T03:30:00Z", "utah", "other", status: "scheduled")

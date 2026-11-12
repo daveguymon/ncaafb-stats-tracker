@@ -18,6 +18,8 @@ class SchedulesController < ApplicationController
   rescue Sportradar::Ncaafb::Client::ConfigurationError => error
     Rails.logger.error("Sportradar configuration error: #{error.message}")
     @error = "Sportradar is not configured correctly. Check the API key and quota settings."
+  rescue Sportradar::Ncaafb::Client::VisitorRateLimitError
+    @error = "Too many new data requests from this connection. Try again in a few minutes."
   rescue Sportradar::Ncaafb::Client::RateLimitError
     @error = "Sportradar's request limit was reached. Try again later or check your account quota."
   rescue Sportradar::Ncaafb::Client::NotFoundError

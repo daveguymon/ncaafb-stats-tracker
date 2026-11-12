@@ -13,6 +13,9 @@ class ApplicationController < ActionController::Base
   helper_method :demo_mode?
 
   def data_client
-    demo_mode? ? Sportradar::Ncaafb::DemoClient.new : Sportradar::Ncaafb::Client.new
+    return Sportradar::Ncaafb::DemoClient.new if demo_mode?
+
+    visitor_key = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, request.remote_ip)
+    Sportradar::Ncaafb::Client.new(visitor_key: visitor_key)
   end
 end

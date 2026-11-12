@@ -15,14 +15,27 @@ module Sportradar
 
       def for_games(games)
         games.to_h do |game|
-          [ game.object_id, {
-            "away" => record_before(game, "away"),
-            "home" => record_before(game, "home")
-          } ]
+          records = {}
+          %w[away home].each do |side|
+            record = record_before(game, side)
+            records[side] = record
+            records["#{side}_coverage"] = coverage(game, side, record)
+          end
+          [ game.object_id, records ]
         end
       end
 
       private
+
+      def coverage(game, side, record)
+        return :unavailable unless record
+
+        number = game.dig(side, "game_number")
+        return :complete if game["season_type"] == "REG" && PLAYED_STATUSES.include?(game["status"]) &&
+          number.is_a?(Integer) && number.positive? && record.values.sum == number - 1
+
+        :unverified
+      end
 
       def record_before(game, side)
         team = game[side] || {}

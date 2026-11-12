@@ -1,17 +1,31 @@
 # Utah Football Stats Tracker
 
-Set `SPORTRADAR_API_KEY` in `.env` for development (see `.env.example`), install
-dependencies with `bundle install`, and start the app with `bin/rails server`.
-To explore without a key or network requests, see [Demo mode](#demo-mode).
-Visit `http://localhost:3000` to view Utah's schedule. Enter a four-digit year
-to load a different season; games are ordered by scheduled time (UTC), with
+## Quick start
+
+With Ruby from `.ruby-version` and Bundler installed, run:
+
+```sh
+bundle install
+DEMO_MODE=true bin/rails server
+```
+
+Visit `http://localhost:3000`. This uses bundled fictional data and needs no
+Sportradar key. For live data, copy `.env.example` to `.env`, set
+`SPORTRADAR_API_KEY`, and restart without `DEMO_MODE=true`; never commit `.env`.
+See [Demo mode](#demo-mode) and [Quota protection](#quota-protection).
+
+## What the app does
+
+Enter a four-digit year to load a different season; games are ordered by scheduled time (UTC), with
 games without a known time last. Expand a game to inspect its response data.
 The location comes from the schedule feed, including the stadium name, city
 and state when available; missing information is not inferred from the home team.
 Matchup records show completed regular-season and postseason results before
 each game, based on the available schedule feed. Future games show only
-results available so far. Where a record cannot be determined it is marked
-unavailable; ties are included when present.
+results available so far. A record is labeled "coverage unverified" when the
+feed does not provide a usable played regular-season game number to check the
+count. This label does not mean data is definitely missing. Where a record
+cannot be determined it is marked unavailable; ties are included when present.
 Select **View play-by-play** for a game to see its periods, drives, and events
 in Sportradar's order. Expand an event for its underlying details and player
 statistics. The reload link checks the cache; it does not force a new API request.
@@ -28,6 +42,57 @@ marking missing values unavailable; the scoreboard above remains the feed's
 game summary, not the replay score. Empty drives do not create replay events.
 Replay requires JavaScript, but the complete event list remains available
 without it. The demo replay is intentionally abbreviated.
+
+## Architecture
+
+Controllers select the live or demo source. The live client checks the cache,
+then uses the request coordinator to enforce the persistent shared budget,
+visitor limit and pacing before calling Sportradar. Both sources normalize
+schedule data through `ScheduleGames`; `SeasonRecords` derives matchup records,
+and `DriveResult` conservatively interprets drive outcomes. ERB partials render
+the schedule and game; `app/javascript/replay.js` adds the optional timeline.
+Demo data comes only from `db/demo/`, not the live client.
+
+Important directories: `app/services/sportradar/ncaafb/` contains the provider
+and domain logic; `app/controllers/`, `app/helpers/`, and `app/views/` contain
+the web interface; `test/` contains fixture, request, JavaScript and browser
+tests. The generated importmap/Hotwire, Jbuilder and Solid gems and database
+definitions remain installed Rails scaffolding; the current UI uses Propshaft
+and plain JavaScript, and the production response cache is a file store. Do
+not assume those generated components are configured application features.
+
+## Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `DEMO_MODE` | Set to `true` for bundled synthetic data. |
+| `SPORTRADAR_API_KEY` | Live API credential; required outside demo mode. |
+| `SPORTRADAR_ACCESS_LEVEL` | Provider access level; defaults to `trial`. |
+| `SPORTRADAR_QUOTA_LIMIT` | Rolling upstream-attempt limit; required in live production. |
+| `SPORTRADAR_QUOTA_WINDOW_SECONDS` | Global budget window; defaults to 86400 seconds. |
+| `RAILS_MASTER_KEY` | Rails production credentials key. |
+| `APP_HOST`, `RENDER_EXTERNAL_HOSTNAME` | Allowed public hostnames. |
+| `FORCE_SSL` | Set to `true` only behind a trusted TLS-terminating proxy. |
+| `PORT`, `RAILS_MAX_THREADS`, `RAILS_LOG_LEVEL` | Server port, thread count, and log level. |
+
+## Tests and operational checks
+
+Run `bin/ci` for setup, style/security checks, Rails and replay tests, and
+browser tests. It requires Node.js and a Chrome-compatible browser/driver, and
+security audits may need network access. `bin/setup` clears application logs
+and temporary files. For focused checks, run `bin/rails test`,
+`bin/rails test:system`, or `node --test test/javascript/replay_test.cjs`.
+Tests use a single Rails worker because they currently modify process-global
+configuration and test doubles.
+
+The app logs structured `sportradar.*` events for cache hits/misses, upstream
+status and duration, limits, invalid responses, and coordination errors.
+These events omit API keys, visitor identifiers, URLs and response bodies.
+The `/up` endpoint checks Rails boot only and does not spend provider quota.
+If state is reported invalid or missing, inspect the persistent storage and
+provider usage before recovery; do not delete the state to bypass a limit.
+
+## Data freshness and request behavior
 
 The schedule combines regular-season and postseason feeds. A missing
 postseason feed is skipped; other API errors are displayed. Responses are
@@ -90,21 +155,33 @@ Each network attempt reserves a slot before the request, including retries,
 remains available and new requests receive the existing rate-limit message
 (HTTP 429 on JSON endpoints). Slots expire on a rolling basis. The budget and
 cooldown are persisted alongside the coordinator lock and shared between
-processes and rolling deploys of quota-aware versions on **one host using the
-same storage volume**.
+processes on **one host using the same storage volume**. State is stored
+separately from the stable lock file and atomically replaced.
+Stop older application processes before deploying this state format: older
+versions do not understand it and must not run concurrently with this version.
+An older release cannot read the migrated state; do not roll back to it without
+a coordinated state migration and accounting for provider usage.
 Never delete or replace that state to obtain more requests. If its data becomes
 corrupt, requests fail closed and the server logs a coordination error; inspect
 the state and your provider's actual usage before recovery.
-For the first deployment of quota protection, stop older application processes
-before starting the new version: older versions do not enforce the budget and
-use an incompatible coordinator-state format. Allow for their previous usage.
+The first request migrates the existing lock-file state while holding the lock.
+Allow for any usage by clients not coordinated by this application.
 All concurrently running versions must use the same budget and window.
 
-The limit cannot coordinate other machines, installations, access levels or
-clients sharing the key. It is not a per-visitor throttle: one visitor can
-exhaust the app's budget. Use an edge rate limiter or restrict access before
-making this app public. Changing the key or access level creates a separate
-budget. When increasing the window or enabling the limit for an existing app,
+The global limit cannot coordinate other machines, installations, access levels
+or clients sharing the key. In live mode, web requests also allow each client
+IP up to 25 upstream attempts in a rolling two-minute window. Cache hits remain
+available after that limit; retries and failed upstream attempts count. The
+application stores a keyed digest of the IP, not the IP itself, in the
+coordination state. Expired visitor entries are pruned on the next uncached
+request, rather than by a background job. People behind the same NAT share a limit. This is not a
+substitute for edge protection against distributed traffic. Ensure that proxy
+and trusted-proxy settings make Rails' `remote_ip` trustworthy for your
+deployment. Non-web uses of the client without a visitor key are not
+per-visitor throttled, but still use the global budget.
+
+Changing the key or access level creates a separate budget. When increasing the
+window or enabling the limit for an existing app,
 prior usage outside the recorded window is not known; account for it manually.
 Keep the server clock synchronized. Deleting the storage volume loses both
 cache and quota history.
@@ -209,7 +286,3 @@ docker run --rm -p 127.0.0.1:8080:80 \
 Visit `http://localhost:8080/up` to check boot. This local-only example does
 not configure TLS or host authorization. Stop the container when finished;
 the named volume persists quota and cache state.
-
-Run Rails tests with `PARALLEL_WORKERS=1 bin/rails test` and replay JavaScript
-tests with `node --test test/javascript/replay_test.cjs` (Node.js is needed
-only for the JavaScript tests, not to run the application).

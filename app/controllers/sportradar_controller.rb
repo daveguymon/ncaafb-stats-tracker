@@ -16,6 +16,9 @@ class SportradarController < ApplicationController
   rescue_from Sportradar::Ncaafb::Client::RateLimitError do
     render json: { error: "Sportradar request limit reached. Try again later or check your account quota." }, status: :too_many_requests
   end
+  rescue_from Sportradar::Ncaafb::Client::VisitorRateLimitError do
+    render json: { error: "Too many new data requests from this connection. Try again in a few minutes." }, status: :too_many_requests
+  end
   rescue_from ArgumentError do
     render json: { error: "Invalid parameter" }, status: :bad_request
   end

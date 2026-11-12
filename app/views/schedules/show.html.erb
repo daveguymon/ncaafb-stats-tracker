@@ -47,7 +47,7 @@
           <p class="eyebrow">UTAH UTES <span class="separator">/</span> <%= @season %> SEASON</p>
           <h2 id="schedule-heading">Game schedule<span>.</span></h2>
           <p class="results-subtitle">Regular season &amp; postseason <span>&middot;</span> Times shown in UTC</p>
-          <p class="results-subtitle">Records entering each game, based on available completed results. Future games show results available so far.</p>
+          <p class="results-subtitle">Records entering each game use available completed results. Coverage is unverified when missing games cannot be ruled out; future games show results so far.</p>
         </div>
         <% if @games %><div class="game-count"><strong><%= format("%02d", @games.size) %></strong><span>GAMES</span></div><% end %>
       </div>
@@ -61,40 +61,7 @@
         <div class="list-label" aria-hidden="true"><span>DATE / WEEK</span><span>MATCHUP</span><span>LOCATION</span><span>RESULT / STATUS</span></div>
         <ol class="game-list">
           <% @games.each do |game| %>
-            <% home = game["home"] || {}; away = game["away"] || {}; score = game["scoring"] || {}; venue = game["venue"] || {}; city_state = [venue["city"], venue["state"]].compact_blank.join(", "); date = game_date(game) %>
-            <li class="game-card">
-              <div class="game-date">
-                <% if date %>
-                  <strong><%= date.utc.strftime("%b %d") %></strong>
-                  <small><%= game["status"] == "time-tbd" ? "#{date.utc.year} · Kickoff TBD" : date.utc.strftime("%Y · %H:%M UTC") %></small>
-                <% else %>
-                  <strong>Date TBD</strong><small>Time not available</small>
-                <% end %>
-                <span class="week-label"><%= game["season_type"] == "PST" ? "POSTSEASON" : (game["week"].present? ? "WEEK #{game["week"]}" : "REGULAR SEASON") %></span>
-              </div>
-              <div class="matchup">
-                <div><span class="matchup-label">AWAY</span><strong><%= away["name"].presence || away["alias"].presence || "Opponent TBD" %></strong><span class="team-record" aria-label="Record entering game: <%= schedule_record(@records[game.object_id]["away"]) %>"><%= schedule_record(@records[game.object_id]["away"]) %></span></div>
-                <span class="versus">at</span>
-                <div><span class="matchup-label">HOME</span><strong><%= home["name"].presence || home["alias"].presence || "Opponent TBD" %></strong><span class="team-record" aria-label="Record entering game: <%= schedule_record(@records[game.object_id]["home"]) %>"><%= schedule_record(@records[game.object_id]["home"]) %></span></div>
-              </div>
-              <div class="game-venue">
-                <span class="game-venue-label">Location: </span>
-                <strong><%= venue["name"].presence || "Stadium unavailable" %></strong>
-                <% if city_state.present? %><small><%= city_state %></small><% end %>
-              </div>
-              <div class="game-result">
-                <% if !score["away_points"].nil? && !score["home_points"].nil? %><strong><%= score["away_points"] %> <span>–</span> <%= score["home_points"] %></strong><% end %>
-                <span class="status"><%= game_status_label(game["status"]) %></span>
-              </div>
-              <% if game["id"].present? %>
-                <%= link_to "View play-by-play →", game_path(game["id"], season: @season), class: "game-link",
-                  "aria-label": "View play-by-play: #{away["name"].presence || "Away team"} at #{home["name"].presence || "Home team"}" %>
-              <% end %>
-              <details class="response-details">
-                <summary>View response data <span aria-hidden="true">+</span></summary>
-                <pre><%= JSON.pretty_generate(game) %></pre>
-              </details>
-            </li>
+            <%= render "game", game: game, records: @records.fetch(game.object_id), season: @season %>
           <% end %>
         </ol>
       <% end %>
