@@ -63,6 +63,32 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".state-message", text: /No play-by-play available yet/
   end
 
+  test "identifies historical drives without offensive team metadata" do
+    game = {
+      "summary" => {
+        "home" => { "id" => "utah", "market" => "Utah", "name" => "Utes" },
+        "away" => { "id" => "usc", "market" => "USC", "name" => "Trojans" }
+      },
+      "periods" => [ { "number" => 1, "pbp" => [
+        { "type" => "drive", "end_reason" => "UNKNOWN", "events" => [
+          { "type" => "play", "play_type" => "kickoff", "start_situation" => { "possession" => { "id" => "usc" } } },
+          { "type" => "play", "play_type" => "punt", "start_situation" => { "possession" => { "id" => "utah" } },
+            "end_situation" => { "possession" => { "id" => "usc" } } }
+        ] },
+        { "type" => "drive", "events" => [
+          { "type" => "play", "play_type" => "pass", "start_situation" => { "possession" => { "id" => "usc" } } }
+        ] }
+      ] } ]
+    }
+    client = Object.new
+    client.define_singleton_method(:game_play_by_play) { |_| game }
+    with_client(client) { get game_path("game-id") }
+
+    assert_response :success
+    assert_select ".drive-heading", text: /Utah Utes drive.*Inferred: Punt/m
+    assert_select ".drive-heading strong", text: "USC Trojans drive"
+  end
+
   test "shows upstream errors with a season-preserving back link" do
     client = Object.new
     client.define_singleton_method(:game_play_by_play) { |_| raise Sportradar::Ncaafb::Client::RateLimitError, "Rate limited" }

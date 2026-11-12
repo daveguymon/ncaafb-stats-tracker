@@ -9,12 +9,14 @@ class SchedulesController < ApplicationController
       return
     end
 
-    @games = Sportradar::Ncaafb::Client.new.team_games(@season)
+    season_games = Sportradar::Ncaafb::Client.new.season_games(@season)
+    @games = season_games.select { |game| [ game.dig("home", "id"), game.dig("away", "id") ].include?(@team[:id]) }
     @games = @games.sort_by { |game| [ game_date(game).nil? ? 1 : 0, game_date(game) || Time.at(0) ] }
+    @records = Sportradar::Ncaafb::SeasonRecords.new(season_games).for_games(@games)
   rescue Sportradar::Ncaafb::Client::ConfigurationError
     @error = "The Sportradar API key is not configured. Set SPORTRADAR_API_KEY and restart the app."
   rescue Sportradar::Ncaafb::Client::RateLimitError
-    @error = "Sportradar's request limit was reached. Please wait a moment and try again."
+    @error = "Sportradar's request limit was reached. Try again later or check your account quota."
   rescue Sportradar::Ncaafb::Client::NotFoundError
     @error = "The regular-season schedule for #{@season} was not found."
   rescue Sportradar::Ncaafb::Client::Error, JSON::ParserError => error

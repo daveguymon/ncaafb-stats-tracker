@@ -1,5 +1,6 @@
 require "net/http"
 require "json"
+require "time"
 
 module Sportradar
   module Ncaafb
@@ -30,17 +31,21 @@ module Sportradar
       TTL_FINAL = 30.days
       TTL_LIVE = 1.minute
       TTL_CURRENT_SCHEDULE = 10.minutes
+      MAX_RATE_LIMIT_RETRIES = 1
+      DEFAULT_RETRY_DELAY = 1
 
       def initialize(api_key: ENV["SPORTRADAR_API_KEY"],
                      access_level: ENV.fetch("SPORTRADAR_ACCESS_LEVEL", "trial"),
                      language: "en",
                      cache: Rails.cache,
+                     coordinator: nil,
                      open_timeout: 5,
                      read_timeout: 10)
         @api_key = api_key
         @access_level = access_level
         @language = language
         @cache = cache
+        @coordinator = coordinator || RequestCoordinator.new(api_key: api_key, access_level: access_level)
         @open_timeout = open_timeout
         @read_timeout = read_timeout
       end
@@ -61,6 +66,12 @@ module Sportradar
       # schedule down to the team's games. Regular season and postseason are
       # both included by default; an unscheduled postseason (404) is skipped.
       def team_games(year, team_id = Teams::UTAH[:id], season_types: %w[REG PST])
+        season_games(year, season_types: season_types).select do |game|
+          game.dig("home", "id") == team_id || game.dig("away", "id") == team_id
+        end
+      end
+
+      def season_games(year, season_types: %w[REG PST])
         Array(season_types).flat_map do |type|
           schedule = season_schedule(year, type)
           games = Array(schedule["weeks"]).flat_map do |week|
@@ -68,7 +79,7 @@ module Sportradar
               game.merge("week" => week["title"] || week["sequence"] || week["number"], "season_type" => type.to_s.upcase)
             end
           end
-          games.select { |game| game.dig("home", "id") == team_id || game.dig("away", "id") == team_id }
+          games
         rescue NotFoundError
           raise unless type.to_s.upcase == "PST"
 
@@ -110,14 +121,21 @@ module Sportradar
         cached = @cache.read(key)
         return cached unless cached.nil?
 
-        data = request(path)
-        @cache.write(key, data, expires_in: ttl.respond_to?(:call) ? ttl.call(data) : ttl)
-        data
+        @coordinator.synchronize do |gate|
+          cached = @cache.read(key)
+          next cached unless cached.nil?
+
+          data = request(path, gate)
+          @cache.write(key, data, expires_in: ttl.respond_to?(:call) ? ttl.call(data) : ttl)
+          data
+        end
+      rescue RequestCoordinator::Busy => e
+        raise RateLimitError, e.message
       end
 
       private
 
-      def request(path)
+      def request(path, gate)
         uri = URI("#{BASE_URL}/#{@access_level}/#{VERSION}/#{@language}/#{path}.json")
         http = Net::HTTP.new(uri.host, uri.port)
         http.use_ssl = true
@@ -128,9 +146,32 @@ module Sportradar
         req["x-api-key"] = @api_key
         req["Accept"] = "application/json"
 
-        handle(http.request(req))
+        attempts = 0
+        loop do
+          gate.wait!
+          gate.defer!(1) if @access_level == "trial"
+          response = http.request(req)
+          return handle(response) unless response.code.to_i == 429
+
+          delay = retry_after(response["Retry-After"])
+          gate.defer!([ delay, @access_level == "trial" ? 1 : 0 ].max)
+          if attempts >= MAX_RATE_LIMIT_RETRIES || delay > RequestCoordinator::MAX_INLINE_WAIT_SECONDS
+            raise RateLimitError.new("Sportradar request limit exceeded; try again later", status: 429)
+          end
+
+          attempts += 1
+        end
       rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, SystemCallError, OpenSSL::SSL::SSLError => e
         raise Error, "Sportradar request failed: #{e.class}"
+      end
+
+      def retry_after(value)
+        return DEFAULT_RETRY_DELAY if value.blank?
+        return value.to_i if value.match?(/\A\d+\z/)
+
+        [ Time.httpdate(value) - Time.now, 0 ].max
+      rescue ArgumentError
+        DEFAULT_RETRY_DELAY
       end
 
       def handle(response)

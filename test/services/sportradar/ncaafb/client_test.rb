@@ -1,10 +1,32 @@
 require "test_helper"
 
 class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
-  FakeResponse = Struct.new(:code, :body)
+  FakeResponse = Struct.new(:code, :body, :headers) do
+    def [](name)
+      headers&.[](name)
+    end
+  end
+
+  class ImmediateCoordinator
+    attr_reader :delays
+
+    def initialize
+      @delays = []
+    end
+
+    def synchronize
+      yield self
+    end
+
+    def wait!; end
+
+    def defer!(delay)
+      @delays << delay
+    end
+  end
 
   def client(**opts)
-    Sportradar::Ncaafb::Client.new(api_key: "key", cache: ActiveSupport::Cache::NullStore.new, **opts)
+    Sportradar::Ncaafb::Client.new(api_key: "key", cache: ActiveSupport::Cache::NullStore.new, coordinator: ImmediateCoordinator.new, **opts)
   end
 
   def stub_http(response)
@@ -87,7 +109,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
 
   test "serves repeated requests from cache" do
     store = ActiveSupport::Cache::MemoryStore.new
-    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store)
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: ImmediateCoordinator.new)
     reqs = stub_http(FakeResponse.new("200", '{"ok":true}')) do
       2.times { assert_equal({ "ok" => true }, c.league_hierarchy) }
     end
@@ -96,7 +118,7 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
 
   test "does not cache errors" do
     store = ActiveSupport::Cache::MemoryStore.new
-    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store)
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: ImmediateCoordinator.new)
     reqs = stub_http(FakeResponse.new("500", "")) do
       2.times { assert_raises(Sportradar::Ncaafb::Client::Error) { c.league_hierarchy } }
     end
@@ -118,5 +140,66 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     end
     assert_equal %w[/ncaafb/trial/v7/en/games/abc-123/pbp.json /ncaafb/trial/v7/en/games/abc-123/statistics.json],
                  reqs.map { |r| r.uri.path }
+  end
+
+  test "retries a short rate limit once and caches the successful response" do
+    responses = [ FakeResponse.new("429", "", { "Retry-After" => "0" }), FakeResponse.new("200", '{"ok":true}') ]
+    coordinator = ImmediateCoordinator.new
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: ActiveSupport::Cache::MemoryStore.new, coordinator: coordinator)
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:request) { |_| responses.shift }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      assert_equal({ "ok" => true }, c.league_hierarchy)
+      assert_equal({ "ok" => true }, c.league_hierarchy)
+      assert_empty responses
+      assert_equal [ 1, 1, 1 ], coordinator.delays
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "does not retry a long rate limit and retains the cooldown" do
+    coordinator = ImmediateCoordinator.new
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator)
+    reqs = stub_http(FakeResponse.new("429", "", { "Retry-After" => "120" })) do
+      error = assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { c.league_hierarchy }
+      assert_equal 429, error.status
+    end
+    assert_equal 1, reqs.size
+    assert_equal [ 1, 120 ], coordinator.delays
+  end
+
+  test "bounds retries and does not cache rate limit responses" do
+    coordinator = ImmediateCoordinator.new
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: ActiveSupport::Cache::MemoryStore.new, coordinator: coordinator)
+    reqs = stub_http(FakeResponse.new("429", "")) do
+      2.times { assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { c.league_hierarchy } }
+    end
+    assert_equal 4, reqs.size
+  end
+
+  test "parses Retry-After HTTP dates and handles malformed values" do
+    c = client
+    travel_to Time.utc(2026, 11, 12, 12) do
+      assert_equal 2, c.send(:retry_after, 2.seconds.from_now.httpdate)
+      assert_equal 0, c.send(:retry_after, 1.second.ago.httpdate)
+      assert_equal 1, c.send(:retry_after, "invalid")
+    end
+  end
+
+  test "reports a busy coordinator as a rate limit and still serves cache hits" do
+    coordinator = Object.new
+    coordinator.define_singleton_method(:synchronize) { raise Sportradar::Ncaafb::RequestCoordinator::Busy, "busy" }
+    store = ActiveSupport::Cache::MemoryStore.new
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: coordinator)
+    assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { c.league_hierarchy }
+
+    store.write([ "sportradar/ncaafb", "trial", "league/hierarchy" ], { "cached" => true })
+    assert_equal({ "cached" => true }, c.league_hierarchy)
   end
 end

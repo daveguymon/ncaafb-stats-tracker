@@ -10,7 +10,7 @@ class SportradarController < ApplicationController
     render json: { error: "Not found" }, status: :not_found
   end
   rescue_from Sportradar::Ncaafb::Client::RateLimitError do
-    render json: { error: "Rate limited by Sportradar" }, status: :too_many_requests
+    render json: { error: "Sportradar request limit reached. Try again later or check your account quota." }, status: :too_many_requests
   end
   rescue_from ArgumentError do
     render json: { error: "Invalid parameter" }, status: :bad_request

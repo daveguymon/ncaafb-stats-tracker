@@ -10,7 +10,7 @@ class GamesController < ApplicationController
   rescue Sportradar::Ncaafb::Client::NotFoundError
     @error = "Play-by-play data for this game was not found."
   rescue Sportradar::Ncaafb::Client::RateLimitError
-    @error = "Sportradar's request limit was reached. Please wait a moment and try again."
+    @error = "Sportradar's request limit was reached. Try again later or check your account quota."
   rescue Sportradar::Ncaafb::Client::Error, JSON::ParserError => error
     Rails.logger.error("Play-by-play request failed: #{error.class}: #{error.message}")
     @error = "Could not load play-by-play data from Sportradar. Please try again."

@@ -73,6 +73,7 @@ button:hover { background: #9c0a23; }
 .week-label { display: inline-block; margin-top: 9px; color: var(--red); font-size: 9px; letter-spacing: .08em; }
 .matchup { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 13px; line-height: 1.35; }
 .matchup-label { display: block; margin-bottom: 5px; color: #999; font-size: 9px; }
+.team-record { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
 .versus { color: #aaa; font-family: Georgia, serif; font-style: italic; }
 .game-result strong { display: block; font-size: 20px; }
 .game-result strong span { color: #aaa; font-weight: normal; }
