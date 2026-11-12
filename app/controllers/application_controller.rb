@@ -13,9 +13,8 @@ class ApplicationController < ActionController::Base
   helper_method :demo_mode?
 
   def data_client
-    return Sportradar::Ncaafb::DemoClient.new if demo_mode?
-
-    visitor_key = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, request.remote_ip)
-    Sportradar::Ncaafb::Client.new(visitor_key: visitor_key)
+    factory = request.env.fetch("ncaafb.data_source_factory") { Sportradar::Ncaafb::DataSourceFactory.new }
+    demo = demo_mode?
+    factory.build(demo: demo, remote_ip: demo ? nil : request.remote_ip)
   end
 end

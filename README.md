@@ -45,11 +45,12 @@ without it. The demo replay is intentionally abbreviated.
 
 ## Architecture
 
-Controllers select the live or demo source. The live client checks the cache,
+Controllers use `DataSourceFactory` to select the live or demo source. The live client checks the cache,
 then uses the request coordinator to enforce the persistent shared budget,
 visitor limit and pacing before calling Sportradar. Both sources normalize
 schedule data through `ScheduleGames`; `SeasonRecords` derives matchup records,
-and `DriveResult` conservatively interprets drive outcomes. ERB partials render
+`DriveTeam` resolves possession and `DriveResult` conservatively interprets
+drive outcomes. ERB partials render
 the schedule and game; `app/javascript/replay.js` adds the optional timeline.
 Demo data comes only from `db/demo/`, not the live client.
 
@@ -83,7 +84,9 @@ security audits may need network access. `bin/setup` clears application logs
 and temporary files. For focused checks, run `bin/rails test`,
 `bin/rails test:system`, or `node --test test/javascript/replay_test.cjs`.
 Tests use a single Rails worker because they currently modify process-global
-configuration and test doubles.
+configuration and some HTTP test doubles. Controller integration tests inject
+their source factory through an internal request environment entry, not an
+HTTP parameter or header; this keeps the replacement scoped to that request.
 
 The app logs structured `sportradar.*` events for cache hits/misses, upstream
 status and duration, limits, invalid responses, and coordination errors.

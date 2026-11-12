@@ -1,14 +1,8 @@
 require "test_helper"
+require_relative "../support/data_source_injection"
 
 class GamesControllerTest < ActionDispatch::IntegrationTest
-  def with_client(client)
-    original = Sportradar::Ncaafb::Client.method(:new)
-    client.define_singleton_method(:request_metadata) { [] } unless client.respond_to?(:request_metadata)
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| client }
-    yield
-  ensure
-    Sportradar::Ncaafb::Client.define_singleton_method(:new, original)
-  end
+  include DataSourceInjection
 
   test "shows the cached play-by-play fetch time and reload semantics" do
     client = Object.new

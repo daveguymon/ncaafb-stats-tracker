@@ -1,6 +1,9 @@
 require "test_helper"
+require_relative "../support/data_source_injection"
 
 class DemoModeTest < ActionDispatch::IntegrationTest
+  include DataSourceInjection
+
   setup do
     @previous_mode = ENV["DEMO_MODE"]
     @previous_key = ENV["SPORTRADAR_API_KEY"]
@@ -8,15 +11,15 @@ class DemoModeTest < ActionDispatch::IntegrationTest
     ENV["DEMO_MODE"] = "true"
     ENV.delete("SPORTRADAR_API_KEY")
     ENV.delete("SPORTRADAR_QUOTA_LIMIT")
-    @original_client = Sportradar::Ncaafb::Client.method(:new)
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| raise "Live client must not be used in demo mode" }
+    @test_data_source_factory = Sportradar::Ncaafb::DataSourceFactory.new(
+      live_builder: ->(visitor_key:) { raise "Live client must not be used in demo mode" }
+    )
   end
 
   teardown do
     ENV["DEMO_MODE"] = @previous_mode
     ENV["SPORTRADAR_API_KEY"] = @previous_key
     ENV["SPORTRADAR_QUOTA_LIMIT"] = @previous_limit
-    Sportradar::Ncaafb::Client.define_singleton_method(:new, @original_client)
   end
 
   test "navigates the synthetic schedule and abbreviated game without an API key" do
@@ -63,16 +66,16 @@ class DemoModeTest < ActionDispatch::IntegrationTest
     fake.define_singleton_method(:season_games) { |_| [] }
     fake.define_singleton_method(:request_metadata) { [] }
     fake.define_singleton_method(:league_hierarchy) { { "live" => true } }
-    Sportradar::Ncaafb::Client.define_singleton_method(:new) { |**| fake }
-
-    get root_path, params: { season: "2024" }
-    assert_response :success
-    assert_select ".demo-banner", count: 0
-    assert_select ".flow", text: /Sportradar API/
-    get "/sportradar/hierarchy"
-    assert_response :success
-    assert_equal({ "live" => true }, response.parsed_body)
-    assert_nil response.headers["X-Data-Source"]
+    with_client(fake) do
+      get root_path, params: { season: "2024" }
+      assert_response :success
+      assert_select ".demo-banner", count: 0
+      assert_select ".flow", text: /Sportradar API/
+      get "/sportradar/hierarchy"
+      assert_response :success
+      assert_equal({ "live" => true }, response.parsed_body)
+      assert_nil response.headers["X-Data-Source"]
+    end
   end
 
   test "JSON endpoints identify demo data and never fall back to live" do
