@@ -2,6 +2,7 @@
 
 Set `SPORTRADAR_API_KEY` in `.env` for development (see `.env.example`), install
 dependencies with `bundle install`, and start the app with `bin/rails server`.
+To explore without a key or network requests, see [Demo mode](#demo-mode).
 Visit `http://localhost:3000` to view Utah's schedule. Enter a four-digit year
 to load a different season; games are ordered by scheduled time (UTC), with
 games without a known time last. Expand a game to inspect its response data.
@@ -37,11 +38,35 @@ repeated 429s are reported to the user. This does not coordinate separate
 hosts or other clients using the same API key. Check your account's actual
 QPS and rolling quota before deploying multiple instances.
 
+## Demo mode
+
+Start the app with `DEMO_MODE=true bin/rails server` (or set `DEMO_MODE=true`
+in your development `.env`). Demo mode is an application-wide deployment
+setting, not a per-user switch. Restart the server after changing it. It
+requires no Sportradar key or quota configuration and does not use the live
+client, its cache, or its request budget.
+
+The bundled 2024 season contains one **fictional** Utah versus Sample State
+game. Its score, records, stadium and abbreviated play-by-play are synthetic;
+they are not historical results or a complete game. The banner remains visible
+on the schedule, game, and error pages. Only 2024 and the sample game are
+available; selecting another season or game reports that demo data is
+unavailable, without falling back to Sportradar.
+
+The JSON schedule, Utah games and play-by-play routes also use the sample and
+include `X-Data-Source: demo`. The hierarchy, game summary and statistics
+routes return 404 in demo mode because no representative samples are bundled.
+Errors include the same source header. To use live data again, unset
+`DEMO_MODE` or set it to `false` and configure the normal API credentials.
+For a demo-only deployment, set `DEMO_MODE=true` in the platform's environment;
+the provided Kamal template is for live mode, so remove its
+`SPORTRADAR_API_KEY` secret entry if deploying without that key.
+
 ## Quota protection
 
 Set `SPORTRADAR_QUOTA_LIMIT` to a positive integer to cap upstream attempts in
 a rolling window, and optionally set `SPORTRADAR_QUOTA_WINDOW_SECONDS`
-(default `86400`). Production requires a limit; development and test are
+(default `86400`). Live production mode requires a limit; development and test are
 unlimited unless one is configured. The supplied Kamal configuration starts
 at 25 attempts per 24 hours, **not** a statement of your provider's quota.
 Choose a lower budget if necessary for your plan, including other clients and

@@ -1,7 +1,7 @@
 class SchedulesController < ApplicationController
   def show
     @team = Sportradar::Ncaafb::Teams::UTAH
-    @season = params[:season].presence || current_season.to_s
+    @season = params[:season].presence || (demo_mode? ? Sportradar::Ncaafb::DemoClient::SEASON : current_season.to_s)
 
     unless @season.is_a?(String) && @season.match?(/\A\d{4}\z/)
       @season = ""
@@ -9,7 +9,7 @@ class SchedulesController < ApplicationController
       return
     end
 
-    client = Sportradar::Ncaafb::Client.new
+    client = data_client
     season_games = client.season_games(@season)
     @freshness = client.request_metadata
     @games = season_games.select { |game| [ game.dig("home", "id"), game.dig("away", "id") ].include?(@team[:id]) }
@@ -21,10 +21,14 @@ class SchedulesController < ApplicationController
   rescue Sportradar::Ncaafb::Client::RateLimitError
     @error = "Sportradar's request limit was reached. Try again later or check your account quota."
   rescue Sportradar::Ncaafb::Client::NotFoundError
-    @error = "The regular-season schedule for #{@season} was not found."
+    @error = if demo_mode?
+      "Demo data is available only for the #{Sportradar::Ncaafb::DemoClient::SEASON} season."
+    else
+      "The regular-season schedule for #{@season} was not found."
+    end
   rescue Sportradar::Ncaafb::Client::Error, JSON::ParserError => error
     Rails.logger.error("Schedule request failed: #{error.class}: #{error.message}")
-    @error = "Could not load the schedule from Sportradar. Please try again."
+    @error = demo_mode? ? "Could not load the demo schedule. Please contact the app operator." : "Could not load the schedule from Sportradar. Please try again."
   end
 
   private

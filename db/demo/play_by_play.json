@@ -1,0 +1,42 @@
+{
+  "id": "demo-utah-sample-state",
+  "status": "closed",
+  "summary": {
+    "home": { "id": "28e1dbb0-1295-42ca-bda1-fddb122aed2b", "market": "Utah", "name": "Utes", "alias": "UTAH", "points": 7 },
+    "away": { "id": "demo-sample-state", "market": "Sample", "name": "State", "alias": "SAMPLE", "points": 0 },
+    "venue": { "name": "Illustrative stadium" }
+  },
+  "periods": [
+    {
+      "number": 1,
+      "period_type": "quarter",
+      "pbp": [
+        {
+          "type": "drive",
+          "id": "demo-drive-1",
+          "offensive_team": { "id": "28e1dbb0-1295-42ca-bda1-fddb122aed2b" },
+          "play_count": 1,
+          "net_yards": 75,
+          "end_reason": "Touchdown",
+          "events": [
+            {
+              "type": "play",
+              "play_type": "pass",
+              "clock": "14:00",
+              "description": "Illustrative 75-yard touchdown pass.",
+              "away_points": 0,
+              "home_points": 6,
+              "start_situation": { "down": 1, "yfd": 10, "location": { "alias": "UTAH", "yardline": 25 } },
+              "details": [ { "category": "touchdown" } ],
+              "statistics": [ { "stat_type": "passing", "yards": 75 } ]
+            },
+            { "type": "play", "play_type": "extra_point", "clock": "14:00", "description": "Illustrative extra point is good.", "away_points": 0, "home_points": 7 }
+          ]
+        }
+      ]
+    },
+    { "number": 2, "period_type": "quarter", "pbp": [ { "type": "event", "event_type": "period_end", "clock": "00:00", "description": "Illustrative end of first half.", "away_points": 0, "home_points": 7 } ] },
+    { "number": 3, "period_type": "quarter", "pbp": [ { "type": "event", "event_type": "period_end", "clock": "00:00", "description": "Illustrative end of third quarter.", "away_points": 0, "home_points": 7 } ] },
+    { "number": 4, "period_type": "quarter", "pbp": [ { "type": "event", "event_type": "game_end", "clock": "00:00", "description": "Illustrative final whistle.", "away_points": 0, "home_points": 7 } ] }
+  ]
+}

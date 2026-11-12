@@ -20,7 +20,7 @@
         <div class="team-selection"><span class="team-badge">U</span><span>Utah Utes<small>Selected team</small></span><span class="check" aria-hidden="true">&#10003;</span></div>
         <label for="season">SEASON YEAR</label>
         <input id="season" name="season" type="number" inputmode="numeric" min="1000" max="9999" step="1" value="<%= @season %>" required>
-        <p class="field-help">Enter a past or current season year.</p>
+        <p class="field-help"><%= demo_mode? ? "Demo data is available for 2024 only." : "Enter a past or current season year." %></p>
         <button type="submit">View schedule <span aria-hidden="true">&rarr;</span></button>
       </form>
 
@@ -29,11 +29,15 @@
         <p>How your schedule gets here</p>
         <ol>
           <li><strong>Your selection</strong><small>Utah Utes &middot; <%= @season %></small></li>
-          <li><strong>App cache</strong><small>Checks for a saved response</small></li>
-          <li><strong>Sportradar API</strong><small>Requests schedules if needed</small></li>
+          <% if demo_mode? %>
+            <li><strong>Bundled sample</strong><small>Loads synthetic schedule data</small></li>
+          <% else %>
+            <li><strong>App cache</strong><small>Checks for a saved response</small></li>
+            <li><strong>Sportradar API</strong><small>Requests schedules if needed</small></li>
+          <% end %>
           <li><strong>Game list</strong><small>Filters and orders Utah games</small></li>
         </ol>
-        <p class="flow-note">Regular season and postseason schedules are requested. A missing postseason is skipped.</p>
+        <p class="flow-note"><%= demo_mode? ? "This fictional sample contains one regular-season game and no postseason games." : "Regular season and postseason schedules are requested. A missing postseason is skipped." %></p>
       </div>
     </aside>
 
@@ -89,7 +93,7 @@
           <% end %>
         </ol>
       <% end %>
-      <div class="data-source"><span class="live-dot"></span> DATA PROVIDED BY SPORTRADAR <span> / </span> SUBJECT TO AVAILABILITY</div>
+      <div class="data-source"><span class="live-dot"></span> <%= demo_mode? ? "SYNTHETIC DEMO DATA / NOT AN ACTUAL GAME" : "DATA PROVIDED BY SPORTRADAR / SUBJECT TO AVAILABILITY" %></div>
     </section>
   </section>
   <footer><span>UTAH FOOTBALL STATS TRACKER</span><span>BUILT FOR THE GAME.</span></footer>

@@ -14,6 +14,7 @@
 body { margin: 0; background: #f5f4f1; color: var(--ink); font-family: Arial, sans-serif; }
 .dashboard { max-width: 1600px; margin: auto; }
 .masthead { display: flex; justify-content: space-between; align-items: center; padding: 22px 6%; background: #fff; }
+.demo-banner { padding: 12px 6%; background: #fff1ca; color: #473600; font-size: 13px; line-height: 1.5; }
 .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font-size: 15px; letter-spacing: .05em; }
 .brand strong { color: var(--red); }
 .brand small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; font-weight: bold; letter-spacing: .23em; }

@@ -1,15 +1,17 @@
 class SportradarController < ApplicationController
+  before_action { response.set_header("X-Data-Source", "demo") if demo_mode? }
+
   # Handlers are matched last-to-first, so the generic error goes first.
   rescue_from Sportradar::Ncaafb::Client::Error do |error|
     Rails.logger.error("Sportradar request failed: #{error.class}: #{error.message}")
-    render json: { error: "Upstream Sportradar error" }, status: :bad_gateway
+    render json: { error: demo_mode? ? "Demo data could not be loaded" : "Upstream Sportradar error" }, status: :bad_gateway
   end
   rescue_from Sportradar::Ncaafb::Client::ConfigurationError do |error|
     Rails.logger.error("Sportradar configuration error: #{error.message}")
     render json: { error: "Sportradar API is not configured" }, status: :service_unavailable
   end
   rescue_from Sportradar::Ncaafb::Client::NotFoundError do
-    render json: { error: "Not found" }, status: :not_found
+    render json: { error: demo_mode? ? "Not available in demo mode" : "Not found" }, status: :not_found
   end
   rescue_from Sportradar::Ncaafb::Client::RateLimitError do
     render json: { error: "Sportradar request limit reached. Try again later or check your account quota." }, status: :too_many_requests
@@ -45,6 +47,6 @@ class SportradarController < ApplicationController
   private
 
   def client
-    Sportradar::Ncaafb::Client.new
+    data_client
   end
 end

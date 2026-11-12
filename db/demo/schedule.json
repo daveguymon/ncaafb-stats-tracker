@@ -1,0 +1,17 @@
+{
+  "weeks": [
+    {
+      "title": "1",
+      "games": [
+        {
+          "id": "demo-utah-sample-state",
+          "scheduled": "2024-08-31T18:00:00Z",
+          "status": "closed",
+          "home": { "id": "28e1dbb0-1295-42ca-bda1-fddb122aed2b", "name": "Utah Utes", "alias": "UTAH", "game_number": 1 },
+          "away": { "id": "demo-sample-state", "name": "Sample State", "alias": "SAMPLE", "game_number": 1 },
+          "scoring": { "home_points": 7, "away_points": 0 }
+        }
+      ]
+    }
+  ]
+}
