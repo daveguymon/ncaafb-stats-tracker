@@ -1,4 +1,6 @@
-<li class="game-event">
+<li class="game-event" data-replay-period="<%= period_label %>"
+    data-replay-away-score="<%= event["away_points"] if event["away_points"].is_a?(Integer) && event["away_points"] >= 0 %>"
+    data-replay-home-score="<%= event["home_points"] if event["home_points"].is_a?(Integer) && event["home_points"] >= 0 %>">
   <div class="event-clock"><%= event["clock"].presence || "—" %></div>
   <div class="event-content">
     <div class="event-meta">

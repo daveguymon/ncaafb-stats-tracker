@@ -43,7 +43,7 @@ form label, .field-label { display: block; margin: 23px 0 10px; color: #62656a; 
 .team-selection small { display: block; color: var(--muted); font-size: 11px; font-weight: normal; margin-top: 3px; }
 .check { margin-left: auto; color: var(--red); }
 input { width: 100%; padding: 12px; border: 1px solid #dcdad6; border-radius: 0; font: inherit; }
-input:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #e24c65; outline-offset: 3px; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #e24c65; outline-offset: 3px; }
 .field-help, .flow-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
 button { display: flex; justify-content: space-between; width: 100%; margin-top: 18px; padding: 14px; border: 0; background: var(--red); color: #fff; font-weight: bold; cursor: pointer; }
 button:hover { background: #9c0a23; }
@@ -109,6 +109,21 @@ button:hover { background: #9c0a23; }
 .progression-heading h1 { margin: 8px 0; font-size: 32px; letter-spacing: -.04em; }
 .progression-heading h1 span { color: var(--red); }
 .refresh-link { flex-shrink: 0; margin-top: 10px; color: var(--red); font-size: 12px; font-weight: bold; text-decoration: none; }
+.replay { margin-top: 24px; padding: 18px; border: 1px solid var(--line); background: #f7f6f4; }
+.replay h2 { margin: 0; font-size: 18px; }
+.replay > p, .replay-current { font-size: 12px; line-height: 1.5; }
+.replay > p { color: #62656a; }
+.replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.replay-controls button { display: inline-block; width: auto; margin: 0; padding: 10px 12px; }
+.replay-controls button:disabled { background: #aaa; cursor: not-allowed; }
+.replay-controls label { margin: 0 0 0 6px; }
+.replay-controls select { padding: 9px; border: 1px solid #dcdad6; background: white; font: inherit; }
+.replay > label { display: block; margin: 18px 0 4px; }
+.replay input[type="range"] { padding: 0; accent-color: var(--red); }
+.replay-current { margin: 12px 0; }
+.replay-current p { margin: 5px 0; }
+.replay a { color: var(--red); font-size: 12px; font-weight: bold; }
+.replay-selected { box-shadow: inset 3px 0 var(--red); background: #fff5f6; scroll-margin-top: 20px; }
 .period-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 25px 0; }
 .period-nav a { padding: 9px 12px; border: 1px solid var(--line); color: #555; font-size: 11px; font-weight: bold; text-decoration: none; }
 .period-nav a:hover { border-color: var(--red); color: var(--red); }

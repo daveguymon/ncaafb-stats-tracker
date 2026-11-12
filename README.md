@@ -17,6 +17,16 @@ When a drive's result is missing, the game view labels results inferred from
 its plays; if the feed does not provide enough evidence, the result is
 displayed as unavailable.
 
+The replay timeline steps through drive events and standalone events in feed
+order. Use Previous, Next, Play/Pause, Reset, or the event-position slider;
+playback speed controls the time between events, not game time. Select the link
+to find the current event in the full list and inspect its statistics. The
+replay displays only the score explicitly reported on the selected event,
+marking missing values unavailable; the scoreboard above remains the feed's
+game summary, not the replay score. Empty drives do not create replay events.
+Replay requires JavaScript, but the complete event list remains available
+without it. The demo replay is intentionally abbreviated.
+
 The schedule combines regular-season and postseason feeds. A missing
 postseason feed is skipped; other API errors are displayed. Responses are
 cached in-app according to the existing Sportradar client cache policy.
@@ -141,4 +151,6 @@ Visit `http://localhost:8080/up` to check boot. This local-only example does
 not configure TLS or host authorization. Stop the container when finished;
 the named volume persists quota and cache state.
 
-Run tests with `bin/rails test`.
+Run Rails tests with `PARALLEL_WORKERS=1 bin/rails test` and replay JavaScript
+tests with `node --test test/javascript/replay_test.cjs` (Node.js is needed
+only for the JavaScript tests, not to run the application).

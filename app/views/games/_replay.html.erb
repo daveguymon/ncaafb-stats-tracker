@@ -1,0 +1,25 @@
+<section class="replay" aria-labelledby="replay-heading" hidden>
+  <h2 id="replay-heading">Replay timeline</h2>
+  <p>Step through events in feed order. The score shown is reported for the selected event only; missing scores are unavailable. The full event list remains below.</p>
+  <div class="replay-controls">
+    <button type="button" data-replay-action="reset">Reset</button>
+    <button type="button" data-replay-action="previous">Previous</button>
+    <button type="button" data-replay-action="play">Play</button>
+    <button type="button" data-replay-action="next">Next</button>
+    <label for="replay-speed">Playback speed</label>
+    <select id="replay-speed" data-replay-speed>
+      <option value="4000">Slow</option>
+      <option value="2000" selected>Normal</option>
+      <option value="1000">Fast</option>
+    </select>
+  </div>
+  <label for="replay-position">Event position</label>
+  <input id="replay-position" data-replay-position type="range" min="0" max="0" value="0" step="1">
+  <div class="replay-current" aria-live="polite" aria-atomic="true">
+    <strong data-replay-count>Before first event</strong>
+    <p data-replay-context>Select Next or Play to begin.</p>
+    <p data-replay-description></p>
+    <p data-replay-score>Event score: unavailable</p>
+  </div>
+  <a data-replay-link hidden>View this event in the full list</a>
+</section>

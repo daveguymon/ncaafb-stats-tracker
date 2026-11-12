@@ -62,6 +62,10 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".game-event:nth-child(1)", text: /First play/
     assert_select ".event-meta", text: /1 & 10.*UTAH 25/
     assert_select ".game-event pre", text: /"stat_type": "rush"/
+    assert_select ".replay[hidden]", count: 1
+    assert_select ".game-event[data-replay-period='Quarter 1'][data-replay-away-score='0'][data-replay-home-score='0']", count: 1
+    assert_select ".game-event[data-replay-period='Overtime 1'][data-replay-away-score=''][data-replay-home-score='']", count: 1
+    assert_select "script[src*='replay']", count: 1
     assert_operator response.body.index("First play"), :<, response.body.index("Timeout")
     assert_operator response.body.index("Timeout"), :<, response.body.index("Standalone play")
     assert_operator response.body.index("Standalone play"), :<, response.body.index("Overtime event")
@@ -74,6 +78,25 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
     with_client(client) { get game_path("game-id") }
     assert_response :success
     assert_select ".state-message", text: /No play-by-play available yet/
+    assert_select ".replay", count: 0
+  end
+
+  test "handles empty drives and does not expose invalid event scores to replay" do
+    game = { "periods" => [
+      { "number" => 1, "pbp" => [
+        { "type" => "drive", "events" => [] },
+        { "type" => "event", "description" => "Unsafe <script> text", "away_points" => -1, "home_points" => "7" }
+      ] }
+    ] }
+    client = Object.new
+    client.define_singleton_method(:game_play_by_play) { |_| game }
+    with_client(client) { get game_path("game-id") }
+
+    assert_select ".game-event", count: 1
+    assert_select ".game-event[data-replay-away-score=''][data-replay-home-score='']", count: 1
+    assert_select ".game-event p", text: "Unsafe <script> text"
+    assert_select ".game-event script", count: 0
+    assert_select ".period-empty", text: /No events available for this drive/
   end
 
   test "identifies historical drives without offensive team metadata" do
