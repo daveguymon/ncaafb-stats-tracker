@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: utah-football-stats
+    runtime: ruby
+    plan: starter
+    numInstances: 1
+    buildCommand: bundle install && SECRET_KEY_BASE_DUMMY=1 bundle exec rails assets:precompile
+    startCommand: bundle exec rails db:prepare && bundle exec rails server -b 0.0.0.0
+    healthCheckPath: /up
+    disk:
+      name: utah-football-storage
+      mountPath: /opt/render/project/src/storage
+      sizeGB: 1
+    envVars:
+      - key: RAILS_ENV
+        value: production
+      - key: BUNDLE_WITHOUT
+        value: "development:test"
+      - key: FORCE_SSL
+        value: "true"
+      - key: SPORTRADAR_ACCESS_LEVEL
+        value: trial
+      - key: SPORTRADAR_QUOTA_WINDOW_SECONDS
+        value: "86400"
+      - key: SPORTRADAR_QUOTA_LIMIT
+        sync: false
+      - key: SPORTRADAR_API_KEY
+        sync: false
+      - key: RAILS_MASTER_KEY
+        sync: false

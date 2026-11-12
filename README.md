@@ -109,7 +109,64 @@ prior usage outside the recorded window is not known; account for it manually.
 Keep the server clock synchronized. Deleting the storage volume loses both
 cache and quota history.
 
-## Production deployment
+## Deploy to Render
+
+The included [Render Blueprint](./render.yaml) creates a **paid**, single-instance
+Ruby web service with a 1 GB persistent disk. Confirm current [Render pricing](https://render.com/pricing)
+before creating it. A disk is required for the existing file cache, quota
+history, and SQLite files; Render's free web services cannot attach one.
+Deploys with a disk have brief downtime and cannot scale to multiple instances.
+This project uses SQLite on that disk for its current single-instance setup;
+Render recommends Postgres for production Rails apps. A multi-instance or
+high-availability deployment requires shared database, cache and distributed
+quota coordination instead of this setup.
+
+1. Commit and push your changes to the Git branch Render will deploy. Never
+   commit `.env`, `config/master.key`, or API credentials.
+2. In [Render](https://dashboard.render.com/), choose **New > Blueprint**,
+   connect your Git provider and this repository, and select the branch
+   containing `render.yaml`. Review the paid service and disk before creating
+   them. Render uses the repository's `.ruby-version` (3.3.1).
+3. During Blueprint setup, provide:
+   - `RAILS_MASTER_KEY`: the contents of your local `config/master.key` file.
+     Enter it in Render's secret field, not in the repository.
+   - `SPORTRADAR_API_KEY`: your NCAAFB API key.
+   - `SPORTRADAR_QUOTA_LIMIT`: a positive rolling-window request limit appropriate
+     for your subscription and any other clients using the key. It is not
+     automatically synchronized with Sportradar.
+4. The Blueprint defaults to `trial` access and a `86400`-second quota window.
+   Adjust `SPORTRADAR_ACCESS_LEVEL` and `SPORTRADAR_QUOTA_WINDOW_SECONDS` to
+   match your account, preferably in `render.yaml` before creating the service.
+   The rolling limit does not cover longer provider quotas or other clients.
+5. Start the deployment and watch the Render logs. At startup the service runs
+   `db:prepare` on the mounted disk, then binds to Render's `PORT`. The `/up`
+   health check verifies Rails boot only. After deployment, open the generated
+   `https://...onrender.com` URL and check the schedule and one game. Requests
+   to an uncached feed consume API quota; missing or rate-limited feeds are
+   reported in the app.
+
+Render provides HTTPS and `RENDER_EXTERNAL_HOSTNAME`; the app automatically
+allows that hostname. For a custom domain, configure it in Render and set
+`APP_HOST` to the exact additional hostname. `FORCE_SSL=true` assumes traffic
+arrives through Render's TLS-terminating proxy; don't expose the app directly.
+Use an edge rate limiter or restrict access to prevent visitors exhausting your
+API budget. Monitor Render logs, disk usage and Sportradar account usage.
+
+The disk is mounted at `/opt/render/project/src/storage`, is unavailable during
+builds and pre-deploy commands, and persists across deploys. Do not remove or
+replace it without accounting for the lost quota history; restoring an older
+snapshot also rolls that history back. If migrating an existing API key from
+another installation, allow for earlier usage outside this new disk's history.
+See [Render persistent disks](https://render.com/docs/disks) and
+[Render web services](https://render.com/docs/web-services).
+
+For a demo-only service, set `DEMO_MODE=true` in Render's environment and
+redeploy. The Blueprint still prompts for the API key and limit on creation;
+you may provide a placeholder key and any positive limit for demo mode. No
+Sportradar requests are made in demo mode. Before switching it off, replace
+those values with real credentials and an appropriate limit.
+
+## Other production deployments
 
 The included Dockerfile and Kamal configuration are a **single-host template**,
 not a ready-to-run public deployment. Configure a real host, registry, DNS and
