@@ -6,7 +6,7 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
 
   test "displays freshness separately for regular season and unavailable postseason" do
     client = Object.new
-    client.define_singleton_method(:season_games) { |_| [] }
+    client.define_singleton_method(:season_games) { |_, **| [] }
     client.define_singleton_method(:request_metadata) do
       [
         { path: "games/2020/REG/schedule", source: :cached, fetched_at: Time.utc(2026, 11, 12, 9, 0) },
@@ -21,13 +21,29 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
 
   test "displays an unknown fetch time for legacy cached data" do
     client = Object.new
-    client.define_singleton_method(:season_games) { |_| [] }
+    client.define_singleton_method(:season_games) { |_, **| [] }
     client.define_singleton_method(:request_metadata) do
       [ { path: "games/2020/REG/schedule", source: :cached, fetched_at: nil } ]
     end
+
     with_client(client) { get root_path, params: { season: "2020" } }
 
     assert_select ".freshness", text: /Regular season: Cached; fetch time unavailable/
+  end
+
+  test "displays a partial schedule when postseason requests are rate limited" do
+    client = Object.new
+    client.define_singleton_method(:season_games) do |_, allow_partial:|
+      raise "Expected partial schedules to be enabled" unless allow_partial
+      [ { "id" => "regular-game", "home" => { "id" => Sportradar::Ncaafb::Teams::UTAH[:id] }, "away" => {} } ]
+    end
+    client.define_singleton_method(:request_metadata) do
+      [ { path: "games/2026/PST/schedule", source: :rate_limited, fetched_at: nil } ]
+    end
+    with_client(client) { get root_path, params: { season: "2026" } }
+    assert_response :success
+    assert_select ".game-card", count: 1
+    assert_select ".freshness", text: /Postseason: Temporarily unavailable due to a request limit; no postseason data included/
   end
 
   test "defaults to Utah and current season and orders games by date" do
@@ -43,7 +59,7 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
     client = Object.new
     utah_id = Sportradar::Ncaafb::Teams::UTAH[:id]
     games.each { |game| %w[home away].each { |side| game[side]["id"] = utah_id if game[side]&.dig("id") == "utah" } }
-    client.define_singleton_method(:season_games) { |year| requested_years << year; games }
+    client.define_singleton_method(:season_games) { |year, **| requested_years << year; games }
 
     travel_to Time.utc(2026, 11, 1) do
       with_client(client) { get root_path }
@@ -89,7 +105,7 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
 
   test "selects another season and displays an empty schedule" do
     client = Object.new
-    client.define_singleton_method(:season_games) { |year| year == "2010" ? [] : raise("Unexpected season") }
+    client.define_singleton_method(:season_games) { |year, **| year == "2010" ? [] : raise("Unexpected season") }
     with_client(client) { get root_path, params: { season: "2010" } }
 
     assert_response :success
@@ -107,15 +123,15 @@ class SchedulesControllerTest < ActionDispatch::IntegrationTest
 
   test "displays rate limit and missing schedule errors" do
     client = Object.new
-    client.define_singleton_method(:season_games) { |_| raise Sportradar::Ncaafb::Client::RateLimitError, "Rate limited" }
+    client.define_singleton_method(:season_games) { |_, **| raise Sportradar::Ncaafb::Client::RateLimitError, "Rate limited" }
     with_client(client) { get root_path, params: { season: "2026" } }
     assert_select "[role=alert]", text: /request limit/
 
-    client.define_singleton_method(:season_games) { |_| raise Sportradar::Ncaafb::Client::VisitorRateLimitError, "Limited" }
+    client.define_singleton_method(:season_games) { |_, **| raise Sportradar::Ncaafb::Client::VisitorRateLimitError, "Limited" }
     with_client(client) { get root_path, params: { season: "2026" } }
     assert_select "[role=alert]", text: /Too many new data requests from this connection/
 
-    client.define_singleton_method(:season_games) { |_| raise Sportradar::Ncaafb::Client::NotFoundError, "Not found" }
+    client.define_singleton_method(:season_games) { |_, **| raise Sportradar::Ncaafb::Client::NotFoundError, "Not found" }
     with_client(client) { get root_path, params: { season: "2001" } }
     assert_select "[role=alert]", text: /2001.*not found/
   end

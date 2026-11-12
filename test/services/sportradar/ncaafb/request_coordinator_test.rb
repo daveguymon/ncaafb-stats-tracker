@@ -108,7 +108,7 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
         gate.reserve!(limit: 2, window_seconds: 60)
         gate.defer!(0)
       end
-      assert_raises(Sportradar::Ncaafb::RequestCoordinator::Busy) do
+      assert_raises(Sportradar::Ncaafb::RequestCoordinator::BudgetBusy) do
         coordinator.synchronize { |gate| gate.reserve!(limit: 2, window_seconds: 60) }
       end
       coordinator("other-key").synchronize { |gate| gate.reserve!(limit: 2, window_seconds: 60) }
@@ -318,6 +318,56 @@ class Sportradar::Ncaafb::RequestCoordinatorTest < ActiveSupport::TestCase
       assert_raises(Sportradar::Ncaafb::Client::NotFoundError) { client.league_hierarchy }
       assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.league_hierarchy }
       assert_equal 1, requests.size
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "serves a cached postseason 404 after the budget is exhausted" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: store, coordinator: coordinator, quota_limit: 1, quota_window_seconds: 60)
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |_| }
+    requests = Queue.new
+    fake.define_singleton_method(:request) { |_| requests << true; Struct.new(:code, :body).new("404", "") }
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      2.times { assert_raises(Sportradar::Ncaafb::Client::NotFoundError) { client.season_schedule(2026, "PST") } }
+      assert_equal 1, requests.size
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.season_schedule(2026, "REG") }
+    ensure
+      Net::HTTP.define_singleton_method(:new, original)
+    end
+  end
+
+  test "serves a partial schedule when the regular feed uses the final budget slot" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    client = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: store, coordinator: coordinator, quota_limit: 1, quota_window_seconds: 60)
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |_| }
+    requests = Queue.new
+    fake.define_singleton_method(:request) do |_|
+      requests << true
+      Struct.new(:code, :body).new("200", '{"weeks":[{"games":[{"id":"regular-game"}]}]}')
+    end
+    original = Net::HTTP.method(:new)
+    Net::HTTP.define_singleton_method(:new) { |*| fake }
+    begin
+      2.times do
+        assert_equal [ "regular-game" ], client.season_games(2026, allow_partial: true).map { |game| game["id"] }
+        assert_equal :rate_limited, client.request_metadata.last[:source]
+      end
+      assert_equal 1, requests.size
+      assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { client.season_games(2026) }
     ensure
       Net::HTTP.define_singleton_method(:new, original)
     end

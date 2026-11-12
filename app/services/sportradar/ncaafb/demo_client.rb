@@ -20,7 +20,7 @@ module Sportradar
         type == "REG" ? read_fixture("schedule") : { "weeks" => [] }
       end
 
-      def season_games(year, season_types: %w[REG PST])
+      def season_games(year, season_types: %w[REG PST], allow_partial: false)
         Array(season_types).flat_map do |type|
           ScheduleGames.flatten(season_schedule(year, type), type)
         end

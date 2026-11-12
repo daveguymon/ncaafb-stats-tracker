@@ -106,6 +106,9 @@ HTTP parameter or header; this keeps the replacement scoped to that request.
 The app logs structured `sportradar.*` events for cache hits/misses, upstream
 status and duration, limits, invalid responses, and coordination errors.
 These events omit API keys, visitor identifiers, URLs and response bodies.
+For limit errors, `sportradar.limit` identifies `budget`, `cooldown`, `visitor`,
+or lock `coordination`; a `sportradar.upstream` event with status 429 indicates
+that Sportradar itself returned a rate limit.
 The `/up` endpoint checks Rails boot only and does not spend provider quota.
 If state is reported invalid or missing, inspect the persistent storage and
 provider usage before recovery; do not delete the state to bypass a limit.
@@ -113,7 +116,11 @@ provider usage before recovery; do not delete the state to bypass a limit.
 ## Data freshness and request behavior
 
 The schedule combines regular-season and postseason feeds. A missing
-postseason feed is skipped; other API errors are displayed. Responses are
+postseason feed is skipped and its 404 is cached for 10 minutes to avoid
+repeated quota use. If regular-season data is available but the postseason
+request is rate-limited, the schedule shows the regular-season games and
+explicitly marks postseason data unavailable. Other API errors are displayed.
+JSON endpoints retain their existing error behavior. Responses are
 cached in-app according to the existing Sportradar client cache policy.
 Availability of historical seasons depends on your Sportradar subscription.
 The schedule shows freshness separately for regular-season and postseason feeds;

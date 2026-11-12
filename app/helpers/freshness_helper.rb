@@ -10,6 +10,7 @@ module FreshnessHelper
 
   def freshness_description(entry)
     return "Feed unavailable (not found); no postseason data included." if entry[:source] == :not_found
+    return "Temporarily unavailable due to a request limit; no postseason data included." if entry[:source] == :rate_limited
 
     source = entry[:source] == :cached ? "Cached" : "Fetched from Sportradar"
     return "#{source}; fetch time unavailable" unless entry[:fetched_at]

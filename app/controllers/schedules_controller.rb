@@ -10,7 +10,7 @@ class SchedulesController < ApplicationController
     end
 
     client = data_client
-    season_games = client.season_games(@season)
+    season_games = client.season_games(@season, allow_partial: true)
     @freshness = client.request_metadata
     @games = season_games.select { |game| [ game.dig("home", "id"), game.dig("away", "id") ].include?(@team[:id]) }
     @games = @games.sort_by { |game| [ game_date(game).nil? ? 1 : 0, game_date(game) || Time.at(0) ] }

@@ -7,6 +7,8 @@ module Sportradar
   module Ncaafb
     class RequestCoordinator
       class Busy < StandardError; end
+      class BudgetBusy < Busy; end
+      class CooldownBusy < Busy; end
       class VisitorBusy < StandardError; end
       class StateError < StandardError; end
 
@@ -47,7 +49,7 @@ module Sportradar
 
         def wait!
           wait = state.fetch("cooldown_until") - Time.now.to_f
-          raise Busy, "Sportradar is rate limited; try again later" if wait > MAX_INLINE_WAIT_SECONDS
+          raise CooldownBusy, "Sportradar is rate limited; try again later" if wait > MAX_INLINE_WAIT_SECONDS
 
           sleep(wait) if wait.positive?
         end
@@ -60,7 +62,7 @@ module Sportradar
           requests = current.fetch("requests")
           if limit
             requests = requests.select { |timestamp| timestamp > now - window_seconds }
-            raise Busy, "Sportradar request budget exhausted; try again later" if requests.size >= limit
+            raise BudgetBusy, "Sportradar request budget exhausted; try again later" if requests.size >= limit
             requests << now
           end
 

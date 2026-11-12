@@ -63,7 +63,7 @@ class DemoModeTest < ActionDispatch::IntegrationTest
   test "disabling demo mode uses the live client without demo labels" do
     ENV["DEMO_MODE"] = "false"
     fake = Object.new
-    fake.define_singleton_method(:season_games) { |_| [] }
+    fake.define_singleton_method(:season_games) { |_, **| [] }
     fake.define_singleton_method(:request_metadata) { [] }
     fake.define_singleton_method(:league_hierarchy) { { "live" => true } }
     with_client(fake) do

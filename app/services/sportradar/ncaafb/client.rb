@@ -32,6 +32,7 @@ module Sportradar
       TTL_FINAL = 30.days
       TTL_LIVE = 1.minute
       TTL_CURRENT_SCHEDULE = 10.minutes
+      TTL_POSTSEASON_NOT_FOUND = 10.minutes
       MAX_RATE_LIMIT_RETRIES = 1
       DEFAULT_RETRY_DELAY = 1
       VISITOR_LIMIT = 25
@@ -68,7 +69,9 @@ module Sportradar
       end
 
       def season_schedule(year, season_type = "REG")
-        get("games/#{Integer(year)}/#{validate_season_type(season_type)}/schedule", ttl: schedule_ttl(year))
+        type = validate_season_type(season_type)
+        get("games/#{Integer(year)}/#{type}/schedule", ttl: schedule_ttl(year),
+          not_found_ttl: type == "PST" ? TTL_POSTSEASON_NOT_FOUND : nil)
       end
 
       def weekly_schedule(year, season_type, week)
@@ -84,14 +87,21 @@ module Sportradar
         end
       end
 
-      def season_games(year, season_types: %w[REG PST])
+      def season_games(year, season_types: %w[REG PST], allow_partial: false)
+        regular_loaded = false
         Array(season_types).flat_map do |type|
           schedule = season_schedule(year, type)
+          regular_loaded = true if type.to_s.upcase == "REG"
           ScheduleGames.flatten(schedule, type)
         rescue NotFoundError
           raise unless type.to_s.upcase == "PST"
 
           @request_metadata << { path: "games/#{Integer(year)}/PST/schedule", source: :not_found, fetched_at: nil }
+          []
+        rescue RateLimitError
+          raise unless allow_partial && regular_loaded && type.to_s.upcase == "PST"
+
+          @request_metadata << { path: "games/#{Integer(year)}/PST/schedule", source: :rate_limited, fetched_at: nil }
           []
         end
       end
@@ -123,27 +133,40 @@ module Sportradar
       end
 
       # +ttl+ is a duration, or a callable that receives the parsed response.
-      def get(path, ttl: TTL_STATIC)
+      def get(path, ttl: TTL_STATIC, not_found_ttl: nil)
         raise ConfigurationError, "SPORTRADAR_API_KEY is not set" if @api_key.blank?
 
         legacy_key = [ "sportradar/ncaafb", @access_level, path ]
         key = [ "sportradar/ncaafb/v2", @access_level, @language, path ]
+        missing_key = [ "sportradar/ncaafb/missing/v1", @access_level, @language, path ] if not_found_ttl
         cached = read_cached(key, legacy_key, path)
         return cached[:data] if cached
+        raise_cached_not_found(missing_key)
 
         @coordinator.synchronize do |gate|
           cached = read_cached(key, legacy_key, path)
           next cached[:data] if cached
+          raise_cached_not_found(missing_key)
 
           ActiveSupport::Notifications.instrument("sportradar.cache", outcome: "miss")
-          data = request(path, gate)
+          begin
+            data = request(path, gate)
+          rescue NotFoundError
+            @cache.write(missing_key, true, expires_in: not_found_ttl) if missing_key
+            raise
+          end
           fetched_at = Time.current.utc
           @cache.write(key, { data: data, fetched_at: fetched_at }, expires_in: ttl.respond_to?(:call) ? ttl.call(data) : ttl)
           @request_metadata << { path: path, source: :fetched, fetched_at: fetched_at }
           data
         end
       rescue RequestCoordinator::Busy => e
-        ActiveSupport::Notifications.instrument("sportradar.limit", kind: "coordination")
+        kind = case e
+        when RequestCoordinator::BudgetBusy then "budget"
+        when RequestCoordinator::CooldownBusy then "cooldown"
+        else "coordination"
+        end
+        ActiveSupport::Notifications.instrument("sportradar.limit", kind: kind)
         raise RateLimitError, e.message
       rescue RequestCoordinator::VisitorBusy => e
         ActiveSupport::Notifications.instrument("sportradar.limit", kind: "visitor")
@@ -154,6 +177,13 @@ module Sportradar
       end
 
       private
+
+      def raise_cached_not_found(key)
+        return unless key && @cache.read(key)
+
+        ActiveSupport::Notifications.instrument("sportradar.cache", outcome: "hit")
+        raise NotFoundError.new("Not found", status: 404)
+      end
 
       def quota_settings(limit, window)
         if limit.blank?

@@ -136,6 +136,66 @@ class Sportradar::Ncaafb::ClientTest < ActiveSupport::TestCase
     end
   end
 
+  test "caches only postseason not-found responses and retries after ten minutes" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: ImmediateCoordinator.new)
+    travel_to Time.utc(2026, 11, 12, 12) do
+      reqs = stub_http(FakeResponse.new("404", "")) do
+        2.times { assert_raises(Sportradar::Ncaafb::Client::NotFoundError) { c.season_schedule(2026, "PST") } }
+        2.times { assert_raises(Sportradar::Ncaafb::Client::NotFoundError) { c.season_schedule(2026, "REG") } }
+      end
+      assert_equal 3, reqs.size
+    end
+    travel_to Time.utc(2026, 11, 12, 12, 10) do
+      reqs = stub_http(FakeResponse.new("200", '{"weeks":[]}')) do
+        assert_equal({ "weeks" => [] }, c.season_schedule(2026, "PST"))
+      end
+      assert_equal 1, reqs.size
+    end
+  end
+
+  test "returns explicitly partial regular-season data only when requested" do
+    store = ActiveSupport::Cache::MemoryStore.new
+    responses = [ FakeResponse.new("200", '{"weeks":[{"games":[{"id":"regular-game"}]}]}'),
+      FakeResponse.new("429", "", { "Retry-After" => "120" }) ]
+    fake = Object.new
+    fake.define_singleton_method(:use_ssl=) { |_| }
+    fake.define_singleton_method(:open_timeout=) { |_| }
+    fake.define_singleton_method(:read_timeout=) { |_| }
+    fake.define_singleton_method(:max_retries=) { |_| }
+    fake.define_singleton_method(:request) { |_| responses.shift || FakeResponse.new("429", "", { "Retry-After" => "120" }) }
+    c = Sportradar::Ncaafb::Client.new(api_key: "key", access_level: "production",
+      cache: store, coordinator: ImmediateCoordinator.new, http_factory: ->(_, _) { fake })
+
+    games = c.season_games(2026, allow_partial: true)
+    assert_equal [ "regular-game" ], games.map { |game| game["id"] }
+    assert_equal :rate_limited, c.request_metadata.last[:source]
+    assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { c.season_games(2026) }
+    assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { c.season_games(2026, season_types: [ "PST" ], allow_partial: true) }
+  end
+
+  test "identifies local budget, cooldown and lock denials in operational events" do
+    {
+      Sportradar::Ncaafb::RequestCoordinator::BudgetBusy => "budget",
+      Sportradar::Ncaafb::RequestCoordinator::CooldownBusy => "cooldown",
+      Sportradar::Ncaafb::RequestCoordinator::Busy => "coordination"
+    }.each do |error_class, kind|
+      coordinator = Object.new
+      coordinator.define_singleton_method(:synchronize) { raise error_class, "limited" }
+      c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: ActiveSupport::Cache::NullStore.new, coordinator: coordinator)
+      events = []
+      subscriber = ActiveSupport::Notifications.subscribe("sportradar.limit") do |_, _, _, _, payload|
+        events << payload
+      end
+      begin
+        assert_raises(Sportradar::Ncaafb::Client::RateLimitError) { c.league_hierarchy }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+      assert_equal kind, events.fetch(0).fetch(:kind)
+    end
+  end
+
   test "serves repeated requests from cache" do
     store = ActiveSupport::Cache::MemoryStore.new
     c = Sportradar::Ncaafb::Client.new(api_key: "key", cache: store, coordinator: ImmediateCoordinator.new)
