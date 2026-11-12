@@ -1,0 +1,16 @@
+<% label = period_name(period, index) %>
+<section class="period" id="period-<%= index + 1 %>" aria-labelledby="period-heading-<%= index + 1 %>">
+  <h2 id="period-heading-<%= index + 1 %>"><%= label %></h2>
+  <% if period["pbp"].blank? %>
+    <p class="period-empty">No events available for this period.</p>
+  <% else %>
+    <% period["pbp"].each_with_index do |entry, entry_index| %>
+      <% if entry["type"] == "drive" %>
+        <%= render "drive", drive: entry, summary: summary, period_label: label,
+          following_entries: period["pbp"].drop(entry_index + 1), next_period: next_period %>
+      <% else %>
+        <ol class="event-list standalone-event"><%= render "event", event: entry, period_label: label %></ol>
+      <% end %>
+    <% end %>
+  <% end %>
+</section>

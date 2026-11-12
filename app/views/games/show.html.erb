@@ -31,26 +31,7 @@
             <% end %>
           </nav>
           <% @periods.each_with_index do |period, index| %>
-            <section class="period" id="period-<%= index + 1 %>" aria-labelledby="period-heading-<%= index + 1 %>">
-              <h2 id="period-heading-<%= index + 1 %>"><%= period_name(period, index) %></h2>
-              <% if period["pbp"].blank? %>
-                <p class="period-empty">No events available for this period.</p>
-              <% else %>
-                <% period["pbp"].each_with_index do |entry, entry_index| %>
-                  <% if entry["type"] == "drive" %>
-                    <div class="drive">
-                      <div class="drive-heading"><strong><%= drive_team_name(entry, summary) %> drive</strong>
-                        <span><%= [entry["play_count"] && "#{entry["play_count"]} plays", entry["net_yards"] && "#{entry["net_yards"]} yards", drive_result(entry, period["pbp"].drop(entry_index + 1), @periods[index + 1])].compact.join(" · ") %></span>
-                      </div>
-                      <% if entry["events"].blank? %><p class="period-empty">No events available for this drive.</p><% end %>
-                      <ol class="event-list"><%= render partial: "event", collection: entry["events"] || [], as: :event, locals: { period_label: period_name(period, index) } %></ol>
-                    </div>
-                  <% else %>
-                    <ol class="event-list standalone-event"><%= render "event", event: entry, period_label: period_name(period, index) %></ol>
-                  <% end %>
-                <% end %>
-              <% end %>
-            </section>
+            <%= render "period", period: period, index: index, next_period: @periods[index + 1], summary: summary %>
           <% end %>
         <% end %>
       </section>

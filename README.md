@@ -50,8 +50,9 @@ then uses the request coordinator to enforce the persistent shared budget,
 visitor limit and pacing before calling Sportradar. Both sources normalize
 schedule data through `ScheduleGames`; `SeasonRecords` derives matchup records,
 `DriveTeam` resolves possession and `DriveResult` conservatively interprets
-drive outcomes. ERB partials render
-the schedule and game; `app/javascript/replay.js` adds the optional timeline.
+drive outcomes. ERB partials render the schedule and game; game periods and
+drives each have their own partial, and `app/javascript/replay.js` adds the
+optional timeline.
 Demo data comes only from `db/demo/`, not the live client.
 
 Important directories: `app/services/sportradar/ncaafb/` contains the provider

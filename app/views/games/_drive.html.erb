@@ -1,0 +1,13 @@
+<% details = [
+  drive["play_count"] && "#{drive["play_count"]} plays",
+  drive["net_yards"] && "#{drive["net_yards"]} yards",
+  drive_result(drive, following_entries, next_period)
+].compact.join(" · ") %>
+<div class="drive">
+  <div class="drive-heading">
+    <strong><%= drive_team_name(drive, summary) %> drive</strong>
+    <span><%= details %></span>
+  </div>
+  <% if drive["events"].blank? %><p class="period-empty">No events available for this drive.</p><% end %>
+  <ol class="event-list"><%= render partial: "event", collection: drive["events"] || [], as: :event, locals: { period_label: period_label } %></ol>
+</div>

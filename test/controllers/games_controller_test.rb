@@ -96,6 +96,41 @@ class GamesControllerTest < ActionDispatch::IntegrationTest
     assert_select ".period-empty", text: /No events available for this drive/
   end
 
+  test "preserves period navigation, continuation and mixed event order" do
+    game = {
+      "periods" => [
+        { "number" => 1, "pbp" => [
+          { "type" => "drive", "id" => "continued", "play_count" => 0, "net_yards" => 0, "events" => [
+            { "type" => "play", "description" => "First period play" }
+          ] },
+          { "type" => "event", "event_type" => "period_end", "description" => "First period end" }
+        ] },
+        { "number" => 2, "pbp" => [
+          { "type" => "drive", "id" => "continued", "events" => [
+            { "type" => "play", "description" => "Second period play" }
+          ] },
+          { "type" => "event", "description" => "Second period event" }
+        ] },
+        { "number" => 3, "pbp" => [] }
+      ]
+    }
+    client = Object.new
+    client.define_singleton_method(:game_play_by_play) { |_| game }
+    with_client(client) { get game_path("game-id") }
+
+    assert_response :success
+    assert_select "nav[aria-label='Jump to period'] a[href='#period-3']", text: "Quarter 3"
+    assert_select "#period-1[aria-labelledby='period-heading-1'] #period-heading-1", text: "Quarter 1"
+    assert_select "#period-1 .drive-heading", text: /0 plays.*0 yards.*Continued in next period/m
+    assert_select "#period-3 .period-empty", text: "No events available for this period."
+    assert_select ".game-event" do |events|
+      assert_equal [ "First period play", "First period end", "Second period play", "Second period event" ],
+        events.map { |event| event.at_css(".event-content p").text }
+      assert_equal [ "Quarter 1", "Quarter 1", "Quarter 2", "Quarter 2" ],
+        events.map { |event| event["data-replay-period"] }
+    end
+  end
+
   test "identifies historical drives without offensive team metadata" do
     game = {
       "summary" => {
